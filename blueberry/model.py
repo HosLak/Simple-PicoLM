@@ -35,6 +35,9 @@ class BlueberryAttn(nn.Module):
         self.w_o = nn.Linear(d_model, d_model, bias=False)
         self.w_o.zero_init = 1
         
+        self.q_norm = nn.RMSNorm(self.d_k, eps=1e-6)
+        self.k_norm = nn.RMSNorm(self.d_k, eps=1e-6)
+        
         self.rotary = BlueberryRotary(self.d_k, max_seq_len, rope_theta)
         self.dropout = dropout
         
@@ -45,8 +48,8 @@ class BlueberryAttn(nn.Module):
         qkv = qkv.permute(2, 0, 3, 1, 4)
         Q, K, V = qkv[0], qkv[1], qkv[2]
 
-        Q = self.rotary(Q)
-        K = self.rotary(K)
+        Q = self.rotary(self.q_norm(Q))
+        K = self.rotary(self.k_norm(K))
 
         attn_output = F.scaled_dot_product_attention(
             Q, K, V, is_causal=True, dropout_p=self.dropout if self.training else 0.0
