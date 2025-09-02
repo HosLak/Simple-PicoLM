@@ -7,9 +7,9 @@ from data_utils import set_seed
 
 
 class BlueberryRotary(nn.Module):
-    def __init__(self, dim: int, max_seq_len: int):
+    def __init__(self, dim: int, max_seq_len: int, rope_theta: float = 10000.0):
         super().__init__()
-        angular_freq = (1 / 10000) ** torch.linspace(0, 1, steps=dim//4, dtype=torch.float32)
+        angular_freq = (1 / rope_theta) ** torch.linspace(0, 1, steps=dim//4, dtype=torch.float32)
         angular_freq = torch.cat([angular_freq, angular_freq.new_zeros(dim//4)])
         t = torch.arange(max_seq_len, dtype=torch.float32)
         theta = torch.einsum("i,j -> ij", t, angular_freq)
@@ -25,7 +25,7 @@ class BlueberryRotary(nn.Module):
         return torch.cat((y1, y2), 3).type_as(x_BTHD)
 
 class BlueberryAttn(nn.Module):
-    def __init__(self, d_model: int, n_heads: int, max_seq_len: int, dropout: float = 0.1):
+    def __init__(self, d_model: int, n_heads: int, max_seq_len: int, dropout: float = 0.1, rope_theta: float = 10000.0):
         super().__init__()
         self.d_model = d_model
         self.n_heads = n_heads
@@ -33,11 +33,9 @@ class BlueberryAttn(nn.Module):
 
         self.qkv = nn.Linear(d_model, d_model * 3, bias=False)
         self.w_o = nn.Linear(d_model, d_model, bias=False)
-        self.rotary = BlueberryRotary(self.d_k, max_seq_len)
+        self.rotary = BlueberryRotary(self.d_k, max_seq_len, rope_theta)
         self.dropout = dropout
         
-        
-
     def forward(self, x):
         batch_size, seq_len = x.size(0), x.size(1)
 
@@ -65,9 +63,9 @@ class BlueberryMLP(nn.Module):
         return self.linear2(self.dropout(F.silu(self.linear1(x))))
 
 class BlueberryBlock(nn.Module):
-    def __init__(self, d_model: int, n_heads: int, d_ff: int, max_seq_len: int, dropout: float = 0.1):
+    def __init__(self, d_model: int, n_heads: int, d_ff: int, max_seq_len: int, dropout: float = 0.1, rope_theta: float = 10000.0):
         super().__init__()
-        self.attention = BlueberryAttn(d_model, n_heads, max_seq_len, dropout)
+        self.attention = BlueberryAttn(d_model, n_heads, max_seq_len, dropout, rope_theta)
         self.feed_forward = BlueberryMLP(d_model, d_ff, dropout)
         self.norm1 = nn.RMSNorm(d_model)
         self.norm2 = nn.RMSNorm(d_model)
@@ -90,7 +88,7 @@ class Blueberry(nn.Module):
         self.position_dropout = nn.Dropout(config.dropout)
 
         self.transformer_blocks = nn.ModuleList([
-            BlueberryBlock(config.d_model, config.n_heads, config.d_ff, config.max_seq_len, config.dropout)
+            BlueberryBlock(config.d_model, config.n_heads, config.d_ff, config.max_seq_len, config.dropout, config.rope_theta)
             for _ in range(config.n_layers)
         ])
 
@@ -102,6 +100,13 @@ class Blueberry(nn.Module):
         self.lm_head.weight = self.token_embedding.weight
 
         self.apply(self._init_weights)
+        
+        # Depth-aware init
+        for i, block in enumerate(self.transformer_blocks):
+            std = 0.02 + (i / (config.n_layers - 1)) * 0.04 if config.n_layers > 1 else 0.02
+            torch.nn.init.normal_(block.attention.qkv.weight, mean=0.0, std=std)
+            torch.nn.init.normal_(block.feed_forward.linear1.weight, mean=0.0, std=std)
+            torch.nn.init.normal_(block.feed_forward.linear2.weight, mean=0.0, std=std)
 
     def _init_weights(self, module):
         torch.manual_seed(1337)
