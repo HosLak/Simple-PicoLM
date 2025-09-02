@@ -11,6 +11,7 @@ class ModelConfig:
     d_ff: int = field(init=False)
     batch_size: int = 16
     max_steps: int = 1500 # max_tokens // (batch_size * gradient_accumulation_steps * max_seq_len) = 1 epoch
+    rope_theta: float = 10000.0
 
     # Training parameters
     gradient_accumulation_steps: int = 4 # 16 * 4 = 64
