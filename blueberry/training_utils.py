@@ -90,12 +90,18 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
     schedulers = []
     for optimizer in optimizers:
         warmup_steps = int(config.max_steps * 0.06)
+        milestone1 = int(config.max_steps * 0.8)
+        milestone2 = int(config.max_steps * 0.9)
+        
         def lr_lambda(step):
             if step < warmup_steps:
-                return step / warmup_steps
+                return float(step) / float(max(1, warmup_steps))
+            elif step < milestone1:
+                return 1
+            elif step < milestone2:
+                return 0.316
             else:
-                progress = (step - warmup_steps) / (config.max_steps - warmup_steps)
-                return 0.1 + 0.9 * 0.5 * (1 + math.cos(math.pi * progress))
+                return 0.1
 
         scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
         schedulers.append(scheduler)
