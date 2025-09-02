@@ -53,20 +53,22 @@ class BlueberryAttn(nn.Module):
         return self.w_o(attn_output)
 
 class BlueberryMLP(nn.Module):
-    def __init__(self, d_model: int, d_ff: int, dropout: float = 0.1):
+    def __init__(self, d_model: int, d_ff: int):
         super().__init__()
-        self.linear1 = nn.Linear(d_model, d_ff, bias=False)
-        self.linear2 = nn.Linear(d_ff, d_model, bias=False)
-        self.dropout = nn.Dropout(dropout)
+        self.w1 = nn.Linear(d_model, d_ff, bias=False)
+        self.w2 = nn.Linear(d_ff, d_model, bias=False)
+        self.w3 = nn.Linear(d_model, d_ff, bias=False)
 
     def forward(self, x):
-        return self.linear2(self.dropout(F.silu(self.linear1(x))))
+        # Gated Linear Unit (GLU)
+        return self.w2(F.silu(self.w1(x)) * self.w3(x))
+    
 
 class BlueberryBlock(nn.Module):
     def __init__(self, d_model: int, n_heads: int, d_ff: int, max_seq_len: int, dropout: float = 0.1, rope_theta: float = 10000.0):
         super().__init__()
         self.attention = BlueberryAttn(d_model, n_heads, max_seq_len, dropout, rope_theta)
-        self.feed_forward = BlueberryMLP(d_model, d_ff, dropout)
+        self.feed_forward = BlueberryMLP(d_model, d_ff)
         self.norm1 = nn.RMSNorm(d_model)
         self.norm2 = nn.RMSNorm(d_model)
         self.dropout = nn.Dropout(dropout)
