@@ -33,6 +33,8 @@ class BlueberryAttn(nn.Module):
 
         self.qkv = nn.Linear(d_model, d_model * 3, bias=False)
         self.w_o = nn.Linear(d_model, d_model, bias=False)
+        self.w_o.zero_init = 1
+        
         self.rotary = BlueberryRotary(self.d_k, max_seq_len, rope_theta)
         self.dropout = dropout
         
@@ -58,6 +60,8 @@ class BlueberryMLP(nn.Module):
         self.w1 = nn.Linear(d_model, d_ff, bias=False) # up_proj
         self.w2 = nn.Linear(d_ff, d_model, bias=False) # down_proj
         self.w3 = nn.Linear(d_model, d_ff, bias=False) # gate_proj
+        self.w3.zero_init = 1
+        
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x):
@@ -114,7 +118,10 @@ class Blueberry(nn.Module):
     def _init_weights(self, module):
         torch.manual_seed(1337)
         
-        if isinstance(module, nn.Linear):
+        if hasattr(module, 'zero_init'):
+            if isinstance(module, nn.Linear):
+                torch.nn.init.zeros_(module.weight) 
+        elif isinstance(module, nn.Linear):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
             if module.bias is not None:
                 torch.nn.init.zeros_(module.bias)
