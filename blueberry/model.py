@@ -55,9 +55,9 @@ class BlueberryAttn(nn.Module):
 class BlueberryMLP(nn.Module):
     def __init__(self, d_model: int, d_ff: int, dropout: float = 0.1):
         super().__init__()
-        self.w1 = nn.Linear(d_model, d_ff, bias=False)
-        self.w2 = nn.Linear(d_ff, d_model, bias=False)
-        self.w3 = nn.Linear(d_model, d_ff, bias=False)
+        self.w1 = nn.Linear(d_model, d_ff, bias=False) # up_proj
+        self.w2 = nn.Linear(d_ff, d_model, bias=False) # down_proj
+        self.w3 = nn.Linear(d_model, d_ff, bias=False) # gate_proj
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x):
@@ -107,9 +107,9 @@ class Blueberry(nn.Module):
         # Depth-aware init
         for i, block in enumerate(self.transformer_blocks):
             std = 0.02 + (i / (config.n_layers - 1)) * 0.04 if config.n_layers > 1 else 0.02
-            torch.nn.init.normal_(block.attention.qkv.weight, mean=0.0, std=std)
-            torch.nn.init.normal_(block.feed_forward.linear1.weight, mean=0.0, std=std)
-            torch.nn.init.normal_(block.feed_forward.linear2.weight, mean=0.0, std=std)
+            # torch.nn.init.normal_(block.attention.qkv.weight, mean=0.0, std=std)
+            torch.nn.init.normal_(block.feed_forward.w1.weight, mean=0.0, std=std)
+            torch.nn.init.normal_(block.feed_forward.w2.weight, mean=0.0, std=std)
 
     def _init_weights(self, module):
         torch.manual_seed(1337)
