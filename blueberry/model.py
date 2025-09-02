@@ -102,9 +102,10 @@ class Blueberry(nn.Module):
         self.norm = nn.RMSNorm(config.d_model)
         self.output_dropout = nn.Dropout(config.dropout)
 
-        # Tie weights
+        # UnTie weights
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
-        self.lm_head.weight = self.token_embedding.weight
+        # self.lm_head.weight = self.token_embedding.weight
+        self.lm_head.zero_init = 1
 
         self.apply(self._init_weights)
         
