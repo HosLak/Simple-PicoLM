@@ -75,18 +75,24 @@ class BlueberryMLP(nn.Module):
 class BlueberryBlock(nn.Module):
     def __init__(self, d_model: int, n_heads: int, d_ff: int, max_seq_len: int, dropout: float = 0.1, rope_theta: float = 10000.0):
         super().__init__()
+        
+        self.input_norm = nn.RMSNorm(d_model)
         self.attention = BlueberryAttn(d_model, n_heads, max_seq_len, dropout, rope_theta)
+        self.post_attention_norm = nn.RMSNorm(d_model)
+        
+        self.pre_feedforward_norm = nn.RMSNorm(d_model)
         self.feed_forward = BlueberryMLP(d_model, d_ff, dropout)
-        self.norm1 = nn.RMSNorm(d_model)
-        self.norm2 = nn.RMSNorm(d_model)
+        self.post_feedforward_norm = nn.RMSNorm(d_model)
+        
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x):
-        attn_out = self.attention(self.norm1(x))
+        attn_out = self.post_attention_norm(self.attention(self.input_norm(x)))
         x = x + self.dropout(attn_out)
-        ff_out = self.feed_forward(self.norm2(x))
-        x = x + self.dropout(ff_out)
-        return x
+        
+        ff_out = self.post_feedforward_norm(self.feed_forward(self.pre_feedforward_norm(x)))
+        
+        return x + self.dropout(ff_out)
 
 class Blueberry(nn.Module):
     def __init__(self, config: ModelConfig):
