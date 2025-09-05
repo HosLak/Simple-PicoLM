@@ -55,3 +55,6 @@ python inference.py
 
 # Contributing
 Feel free to contribute new ideas, experiments, or optimizations. Check the issues and discussions tab for ongoing experiments.
+
+# License
+This project is licensed under the **MIT License** - see the LICENSE file for details.
