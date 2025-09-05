@@ -6,6 +6,7 @@ class ModelConfig:
     # Model architecture
     d_model: int = 256
     n_heads: int = 8
+    n_kv_heads: int = field(init=False)
     n_layers: int = 8
     
     d_ff: int = field(init=False)
@@ -48,3 +49,5 @@ class ModelConfig:
         
         # Set d_ff to 4 times d_model
         self.d_ff = int(self.multiple_of * int((((self.d_model * 4 * 2 / 3) * 1.3) + self.multiple_of + 1) // self.multiple_of))
+        
+        self.n_kv_heads = self.n_heads // 4
