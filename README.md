@@ -14,7 +14,11 @@ cd Blueberry-LLM
 ```
 
 3. Run training:
+```
 python run_train.py
+```
 
-4. Run inference:
+5. Run inference:
+```
 python inference.py
+```
