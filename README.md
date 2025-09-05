@@ -35,22 +35,22 @@ Blueberry-AI is an experimental large language model (LLM) project aiming to tra
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/HosLak/Blueberry-LLM.git
+!git clone https://github.com/HosLak/Blueberry-LLM.git
 ```
 
 2. Change into the project directory:
 ```
-cd Blueberry-LLM
+%cd Blueberry-LLM
 ```
 
 3. Run training:
 ```
-python run_train.py
+!python run_train.py
 ```
 
 5. Run inference:
 ```
-python inference.py
+!python inference.py
 ```
 
 # Contributing
