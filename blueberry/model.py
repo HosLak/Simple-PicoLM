@@ -25,13 +25,16 @@ class BlueberryRotary(nn.Module):
         return torch.cat((y1, y2), 3).type_as(x_BTHD)
 
 class BlueberryAttn(nn.Module):
-    def __init__(self, d_model: int, n_heads: int, max_seq_len: int, dropout: float = 0.1, rope_theta: float = 10000.0):
+    def __init__(self, d_model: int, n_heads: int, n_kv_heads: int, max_seq_len: int, dropout: float = 0.1, rope_theta: float = 10000.0):
         super().__init__()
         self.d_model = d_model
         self.n_heads = n_heads
+        self.n_kv_heads = n_kv_heads
         self.d_k = d_model // n_heads
 
-        self.qkv = nn.Linear(d_model, d_model * 3, bias=False)
+        total_qkv_dim = (self.n_heads + (2 * self.n_kv_heads)) * self.d_k
+
+        self.qkv = nn.Linear(d_model, total_qkv_dim, bias=False)
         self.w_o = nn.Linear(d_model, d_model, bias=False)
         self.w_o.zero_init = 1
         
@@ -44,12 +47,21 @@ class BlueberryAttn(nn.Module):
     def forward(self, x):
         batch_size, seq_len = x.size(0), x.size(1)
 
-        qkv = self.qkv(x).reshape(batch_size, seq_len, 3, self.n_heads, self.d_k)
-        qkv = qkv.permute(2, 0, 3, 1, 4)
-        Q, K, V = qkv[0], qkv[1], qkv[2]
+        qkv = self.qkv(x)
+        q_size = self.n_heads * self.d_k
+        kv_size = self.n_kv_heads * self.d_k
+    
+        Q, K, V = torch.split(qkv, [q_size, kv_size, kv_size], dim=-1)
+    
+        Q = Q.view(batch_size, seq_len, self.n_heads, self.d_k).permute(0, 2, 1, 3)
+        K = K.view(batch_size, seq_len, self.n_kv_heads, self.d_k).permute(0, 2, 1, 3)
+        V = V.view(batch_size, seq_len, self.n_kv_heads, self.d_k).permute(0, 2, 1, 3)
 
         Q = self.rotary(self.q_norm(Q))
         K = self.rotary(self.k_norm(K))
+        
+        K = K.repeat_interleave(self.repeats, dim=1)
+        V = V.repeat_interleave(self.repeats, dim=1)
 
         attn_output = F.scaled_dot_product_attention(
             Q, K, V, is_causal=True, dropout_p=self.dropout if self.training else 0.0
@@ -73,11 +85,11 @@ class BlueberryMLP(nn.Module):
     
 
 class BlueberryBlock(nn.Module):
-    def __init__(self, d_model: int, n_heads: int, d_ff: int, max_seq_len: int, dropout: float = 0.1, rope_theta: float = 10000.0):
+    def __init__(self, d_model: int, n_heads: int, n_kv_heads: int, d_ff: int, max_seq_len: int, dropout: float = 0.1, rope_theta: float = 10000.0):
         super().__init__()
         
         self.input_norm = nn.RMSNorm(d_model)
-        self.attention = BlueberryAttn(d_model, n_heads, max_seq_len, dropout, rope_theta)
+        self.attention = BlueberryAttn(d_model, n_heads, n_kv_heads, max_seq_len, dropout, rope_theta)
         self.post_attention_norm = nn.RMSNorm(d_model)
         
         self.pre_feedforward_norm = nn.RMSNorm(d_model)
@@ -104,7 +116,7 @@ class Blueberry(nn.Module):
         self.position_dropout = nn.Dropout(config.dropout)
 
         self.transformer_blocks = nn.ModuleList([
-            BlueberryBlock(config.d_model, config.n_heads, config.d_ff, config.max_seq_len, config.dropout, config.rope_theta)
+            BlueberryBlock(config.d_model, config.n_heads, config.n_kv_heads, config.d_ff, config.max_seq_len, config.dropout, config.rope_theta)
             for _ in range(config.n_layers)
         ])
 
