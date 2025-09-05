@@ -31,6 +31,7 @@ class BlueberryAttn(nn.Module):
         self.n_heads = n_heads
         self.n_kv_heads = n_kv_heads
         self.d_k = d_model // n_heads
+        self.repeats = self.n_heads // self.n_kv_heads
 
         total_qkv_dim = (self.n_heads + (2 * self.n_kv_heads)) * self.d_k
 
