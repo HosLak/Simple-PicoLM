@@ -1,8 +1,16 @@
 import torch
 import torch.nn.functional as F
 from transformers import AutoTokenizer
-from config import ModelConfig
-from model import Blueberry
+
+
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from blueberry.config import ModelConfig
+from blueberry.model import Blueberry
+
+
 import warnings
 warnings.filterwarnings('ignore')
 

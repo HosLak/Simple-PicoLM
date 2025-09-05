@@ -4,11 +4,11 @@ import time
 import warnings
 warnings.filterwarnings('ignore')
 
-from config import ModelConfig
-from data_utils import set_seed, load_and_cache_data, TextTokenDataset
-from training_utils import train_model, save_model
+from .config import ModelConfig
+from .data_utils import set_seed, load_and_cache_data, TextTokenDataset
+from .training_utils import train_model, save_model
 
-if __name__ == "__main__":
+def main():
     # Check system
     print(f"🔍 Device: {'CUDA' if torch.cuda.is_available() else 'CPU'}")
     if torch.cuda.is_available():

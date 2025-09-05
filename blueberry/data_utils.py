@@ -9,7 +9,7 @@ from typing import List
 import os
 import pickle
 
-from config import ModelConfig
+from .config import ModelConfig
 
 def set_seed(seed: int = 1337):
     """Set all random seeds for reproducibility"""

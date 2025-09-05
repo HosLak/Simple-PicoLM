@@ -7,9 +7,9 @@ import math
 import time
 from tqdm import tqdm
 
-from config import ModelConfig
-from model import Blueberry, Muon
-from data_utils import set_seed
+from .config import ModelConfig
+from .model import Blueberry, Muon
+from .data_utils import set_seed
 
 def evaluate_model(model: nn.Module, val_loader: DataLoader, config: ModelConfig):
     """Evaluate model performance"""

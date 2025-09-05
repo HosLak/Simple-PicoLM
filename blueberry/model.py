@@ -2,8 +2,9 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from config import ModelConfig
-from data_utils import set_seed
+
+from .config import ModelConfig
+from .data_utils import set_seed
 
 
 class BlueberryRotary(nn.Module):
