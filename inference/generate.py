@@ -136,6 +136,3 @@ def main():
     
     # Interactive mode
     generator.interactive_generate()
-
-if __name__ == "__main__":
-    main()
