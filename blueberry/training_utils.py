@@ -108,6 +108,23 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
 
     scaler = GradScaler() if config.use_amp else None
 
+    # Initialize lists to store losses
+    train_losses = []
+    val_losses = []
+
+    # Compute initial validation and train loss
+    model.eval()
+    initial_eval = evaluate_model(model, val_loader, config)
+    val_losses.append(initial_eval['val_loss'])
+    print(f"\nInitial Val Loss: {initial_eval['val_loss']:.4f}, "
+          f"Val Acc: {initial_eval['val_accuracy']:.4f}, "
+          f"Val PPL: {initial_eval['val_perplexity']:.2f}")
+
+    # Compute initial train loss using evaluate_model
+    initial_train_eval = evaluate_model(model, train_loader, config)
+    train_losses.append(initial_train_eval['val_loss'])
+    print(f"Initial Train Loss: {initial_train_eval['val_loss']:.4f}")
+
     # Training loop
     model.train()
     step = 0
@@ -174,10 +191,16 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
 
             # Evaluation
             if step % config.eval_every == 0 and step > 0:
+                model.eval()
                 eval_metrics = evaluate_model(model, val_loader, config)
+                val_losses.append(eval_metrics['val_loss'])
+                train_eval_metrics = evaluate_model(model, train_loader, config)
+                train_losses.append(train_eval_metrics['val_loss'])
                 print(f"\nStep {step}: Val Loss: {eval_metrics['val_loss']:.4f}, "
+                      f"Train Loss: {train_eval_metrics['val_loss']:.4f}, "
                       f"Val Acc: {eval_metrics['val_accuracy']:.4f}, "
                       f"Val PPL: {eval_metrics['val_perplexity']:.2f}")
+                model.train()
 
                 if eval_metrics['val_loss'] < best_val_loss:
                     best_val_loss = eval_metrics['val_loss']
@@ -192,8 +215,18 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
     print(f"  ⏱️ Training completed in {training_time:.1f} seconds")
 
     # Final evaluation
+    model.eval()
     final_eval = evaluate_model(model, val_loader, config)
-    print(f"  📊 Final - Loss: {final_eval['val_loss']:.4f}, "
-          f"Acc: {final_eval['val_accuracy']:.4f}, PPL: {final_eval['val_perplexity']:.2f}")
+    final_train_eval = evaluate_model(model, train_loader, config)
+    val_losses.append(final_eval['val_loss'])
+    train_losses.append(final_train_eval['val_loss'])
+    print(f"  📊 Final - Val Loss: {final_eval['val_loss']:.4f}, "
+          f"Train Loss: {final_train_eval['val_loss']:.4f}, "
+          f"Val Acc: {final_eval['val_accuracy']:.4f}, "
+          f"Val PPL: {final_eval['val_perplexity']:.2f}")
+
+    # Print stored losses
+    print("\n📈 Train Losses:", [f"{x:.4f}" for x in train_losses])
+    print("📈 Validation Losses:", [f"{x:.4f}" for x in val_losses])
 
     return model, final_eval
