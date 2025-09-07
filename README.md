@@ -23,7 +23,7 @@ Blueberry-AI is an experimental large language model (LLM) project aiming to tra
 - **QK normalization**: Applied for better stability.
 - **RMSNorm Stabilization**: Applied pre- and post-attention/feed-forward for robust training.
 - **Untied Embedding Weights**: Separate token embedding and output projection for flexibility.
-- **Depth-Aware Weight Initialization**: Scales initialization variance by layer depth.
+- **Depth-Aware Weight Initialization**: Scales initialization variance by layer depth. [Unlocking Transformer Learning: Weight Dispersion and a Novel Depth-Aware Initialization Strategy](https://medium.com/@hosseinlack123/unlocking-transformer-learning-weight-dispersion-and-a-novel-depth-aware-initialization-strategy-6e43dddb10a4)
 - **Zero-Initialization for Key Layers**: Stabilizes training for attention and MLP outputs.
 - **Scaled Embedding Input**: Normalizes token embeddings by sqrt(d_model) for stability.
 - **Better LR Scheduler**: Improved learning rate scheduling.
@@ -75,6 +75,8 @@ The model is currently configured with the following hyperparameters for testing
 - n_kv_heads: 8
 - vocab_size: Approximately equivalent to GPT-2's vocabulary size
 - seq_len: Approximately 2048 (if increasing context length is feasible, otherwise likely to remain around 2048)
+
+[AI Unlocking Hyperparameter Secrets: Building Better AI Models on a Budget](https://medium.com/@hosseinlack123/aiunlocking-hyperparameter-secrets-building-better-ai-models-on-a-budget-60e25562b5e9)
 
 # Usage
 
