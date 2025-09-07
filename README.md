@@ -67,7 +67,8 @@ The model is currently configured with the following hyperparameters for testing
 - vocab_size: 24,576
 - seq_len: 256
 
-**Note**: This is an experimental model used solely to test and improve the architecture's performance. Once the architecture is finalized, we plan to scale up to the following hyperparameters:
+**Note**: This is an experimental model designed to test and optimize the architecture's performance on a limited budget. For a deeper dive into the reasoning behind these hyperparameter choices and strategies for building efficient AI models, check out this article: [AI Unlocking Hyperparameter Secrets: Building Better AI Models on a Budget](https://medium.com/@hosseinlack123/aiunlocking-hyperparameter-secrets-building-better-ai-models-on-a-budget-60e25562b5e9)
+Once the architecture is finalized, we plan to scale up to the following hyperparameters:
 
 - n_layers: 24
 - hidden_dim: 2048
@@ -76,7 +77,6 @@ The model is currently configured with the following hyperparameters for testing
 - vocab_size: Approximately equivalent to GPT-2's vocabulary size
 - seq_len: Approximately 2048 (if increasing context length is feasible, otherwise likely to remain around 2048)
 
-[AI Unlocking Hyperparameter Secrets: Building Better AI Models on a Budget](https://medium.com/@hosseinlack123/aiunlocking-hyperparameter-secrets-building-better-ai-models-on-a-budget-60e25562b5e9)
 
 # Usage
 
