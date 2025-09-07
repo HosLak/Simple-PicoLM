@@ -78,6 +78,13 @@ Once the architecture is finalized, we plan to scale up to the following hyperpa
 - vocab_size: Approximately equivalent to GPT-2's vocabulary size
 - seq_len: Approximately 2048 (if increasing context length is feasible, otherwise likely to remain around 2048)
 
+# Future Roadmap
+
+**We are actively working on improving the Blueberry-AI model.** Planned enhancements include:
+
+- **Stepwise Think Fine-Tuning**: The model will be fine-tuned using the Stepwise Think format to enhance reasoning capabilities and achieve faster, high-quality responses. For more details on this approach, see Stepwise Think: Revolutionizing Chain-of-Thought for Faster AI Responses Without Sacrificing Quality.
+
+**Additional plans will be added as the project evolves.**
 
 # Usage
 
