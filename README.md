@@ -20,11 +20,13 @@ Blueberry-AI is an experimental large language model (LLM) project aiming to tra
 - **Rotary Positional Embeddings (RoPE)**: Efficiently encodes positional information for long sequences.
 - **Grouped-Query Attention (GQA)**: Reduces memory usage while maintaining attention quality.
 - **Gated Linear Unit (GLU)**: Enhances feed-forward expressivity with SiLU activation.
+- **QK normalization**: Applied for better stability.
 - **RMSNorm Stabilization**: Applied pre- and post-attention/feed-forward for robust training.
 - **Untied Embedding Weights**: Separate token embedding and output projection for flexibility.
 - **Depth-Aware Weight Initialization**: Scales initialization variance by layer depth.
 - **Zero-Initialization for Key Layers**: Stabilizes training for attention and MLP outputs.
 - **Scaled Embedding Input**: Normalizes token embeddings by sqrt(d_model) for stability.
+- **Better LR Scheduler**: Improved learning rate scheduling.
 
 ## Training
 - **Muon Optimizer**: Orthogonalized momentum for efficient gradient updates.
