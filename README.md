@@ -73,7 +73,7 @@ At the end, Lucy's mom asked
 !python run_train.py
 ```
 
-5. Run inference:
+4. Run inference:
 ```bash
 !python inference.py
 ```
