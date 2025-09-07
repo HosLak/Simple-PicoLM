@@ -56,6 +56,26 @@ At the end, Lucy's mom asked
 - **Too little training time**: The short training duration limits the model's ability to learn complex patterns.
 - **Too-small dataset**: The limited dataset size restricts the model's exposure to diverse language patterns.
 
+# Model Configuration
+
+The model is currently configured with the following hyperparameters for testing purposes:
+
+- n_layers: 8
+- hidden_dim: 256
+- n_heads: 8 (head_dim: 32)
+- n_kv_heads: 2
+- vocab_size: 24,576
+- seq_len: 256
+
+**Note**: This is an experimental model used solely to test and improve the architecture's performance. Once the architecture is finalized, we plan to scale up to the following hyperparameters:
+
+- n_layers: 24
+- hidden_dim: 2048
+- n_heads: 32 (head_dim: 64)
+- n_kv_heads: 8
+- vocab_size: Approximately equivalent to GPT-2's vocabulary size
+- seq_len: Approximately 2048 (if increasing context length is feasible, otherwise likely to remain around 2048)
+
 # Usage
 
 1. Clone the repository:
