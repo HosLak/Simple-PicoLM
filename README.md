@@ -40,14 +40,15 @@ Using a free Google Colab T4 runtime and only 2 minutes 24 seconds of training, 
 Prompt: ```Once upon a time```
 
 Model Output (trained 2m24s on T4):
-``` Once upon a time, there was a little girl named Lucy. She had a very special wand that she loved to wear pretty things. One day, the garden became very gloomy in her garden and it was very cold, so she decided to go inside.
+```
+Once upon a time, there was a little girl named Lucy. She had a very special wand that she loved to wear pretty things. One day, the garden became very gloomy in her garden and it was very cold, so she decided to go inside.
 
 When they arrived home, Lucy showed her a bottle of perfume, some of water and leaves. The plant was so shiny and delicious! It smelled like an aeroplane, but couldn't see it anywhere. Lucy said it would be okay.
 
 At first, Lucy looked for something else to eat for the melon, but it couldn't find the flower for dinner again. It was too sweet, and it started to feel its way to get more confused.
 
-At the end, Lucy's mom asked ```
-
+At the end, Lucy's mom asked
+```
 **Analysis**: The model already produces fluent grammar and some coherent story structure after a very short training run - impressive for 2m24s. However, the output clearly shows hallucination/nonsense (weird facts, repeated/confused phrases). Two main causes are identified:
 
 - **Too little training time**: The short training duration limits the model's ability to learn complex patterns.
