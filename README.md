@@ -32,8 +32,8 @@ Blueberry-AI is an experimental large language model (LLM) project aiming to tra
 - **Muon Optimizer**: Orthogonalized momentum for efficient gradient updates.
 - **Automatic Mixed Precision (AMP)**: Reduces memory usage and speeds up training.
 - **Multi-GPU Support**: Enables distributed training for scalability.
-- **Dataset**: Uses the Hosseinlack123/Blueberry-testdataset for training.
-- **Tokenizer**: Employs a custom BPE tokenizer with a vocabulary size of 24,576 (Hosseinlack123/Blueberry-testtokenizer).
+- **Dataset**: Uses the [Hosseinlack123/Blueberry-testdataset](https://huggingface.co/datasets/Hosseinlack123/Blueberry-testdataset) for training.
+- **Tokenizer**: Employs a custom BPE tokenizer with a vocabulary size of 24,576 ([Hosseinlack123/Blueberry-testtokenizer](https://huggingface.co/Hosseinlack123/Blueberry-testtokenizer)).
 
 Training Results
 
