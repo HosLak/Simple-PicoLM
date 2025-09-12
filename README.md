@@ -28,6 +28,7 @@ Blueberry-AI is an experimental large language model (LLM) project aiming to tra
 - **Zero-Initialization for Key Layers**: Stabilizes training for attention and MLP outputs.
 - **Scaled Embedding Input**: Normalizes token embeddings by sqrt(d_model) for stability.
 - **Better LR Scheduler**: Improved learning rate scheduling.
+- **Gated Attention (SDPA Output G1)**: Applies a head-specific, elementwise sigmoid gate after Scaled Dot-Product Attention (SDPA) outputs, calculated based on Query (Q).
 
 ## Training
 - **Muon Optimizer**: Orthogonalized momentum for efficient gradient updates.
