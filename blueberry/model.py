@@ -37,7 +37,9 @@ class BlueberryAttn(nn.Module):
         total_qkv_dim = (self.n_heads + (2 * self.n_kv_heads)) * self.d_k
 
         self.qkv = nn.Linear(d_model, total_qkv_dim, bias=False)
+        self.gate_linear = nn.Linear(self.d_k, self.d_k, bias=False)
         self.w_o = nn.Linear(d_model, d_model, bias=False)
+
         self.w_o.zero_init = 1
         
         self.q_norm = nn.RMSNorm(self.d_k, eps=1e-6)
@@ -68,6 +70,11 @@ class BlueberryAttn(nn.Module):
         attn_output = F.scaled_dot_product_attention(
             Q, K, V, is_causal=True, dropout_p=self.dropout if self.training else 0.0
         )
+        
+        gate_scores_raw = self.gate_linear(Q)
+        gate_scores = F.sigmoid(gate_scores_raw)
+        attn_output = attn_output * gate_scores
+        
         attn_output = attn_output.transpose(1, 2).reshape(batch_size, seq_len, self.d_model)
         return self.w_o(attn_output)
 
