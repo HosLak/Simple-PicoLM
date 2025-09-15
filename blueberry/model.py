@@ -37,7 +37,9 @@ class BlueberryAttn(nn.Module):
         total_qkv_dim = (self.n_heads + (2 * self.n_kv_heads)) * self.d_k
 
         self.qkv = nn.Linear(d_model, total_qkv_dim, bias=False)
+        self.gate_linear = nn.Linear(self.d_k, self.d_k, bias=False)
         self.w_o = nn.Linear(d_model, d_model, bias=False)
+
         self.w_o.zero_init = 1
         
         self.q_norm = nn.RMSNorm(self.d_k, eps=1e-6)
@@ -68,15 +70,23 @@ class BlueberryAttn(nn.Module):
         attn_output = F.scaled_dot_product_attention(
             Q, K, V, is_causal=True, dropout_p=self.dropout if self.training else 0.0
         )
+        
+        gate_scores_raw = self.gate_linear(Q)
+        gate_scores = F.sigmoid(gate_scores_raw)
+        attn_output = attn_output * gate_scores
+        
         attn_output = attn_output.transpose(1, 2).reshape(batch_size, seq_len, self.d_model)
         return self.w_o(attn_output)
 
 class BlueberryMLP(nn.Module):
-    def __init__(self, d_model: int, d_ff: int, dropout: float = 0.1):
+    def __init__(self, d_model: int, d_ff: int, n_layers: int, layer_idx: int, dropout: float = 0.1):
         super().__init__()
-        self.w1 = nn.Linear(d_model, d_ff, bias=False) # up_proj
-        self.w2 = nn.Linear(d_ff, d_model, bias=False) # down_proj
-        self.w3 = nn.Linear(d_model, d_ff, bias=False) # gate_proj
+
+        self.d_ff = 16 * round(((1.5 + (4.0 - 1.5) * ((layer_idx - 1) / (n_layers - 1))) * d_model) / 16)
+
+        self.w1 = nn.Linear(d_model, self.d_ff, bias=False) # up_proj
+        self.w2 = nn.Linear(self.d_ff, d_model, bias=False) # down_proj
+        self.w3 = nn.Linear(d_model, self.d_ff, bias=False) # gate_proj
         self.w3.zero_init = 1
         
         self.dropout = nn.Dropout(dropout)
@@ -87,7 +97,7 @@ class BlueberryMLP(nn.Module):
     
 
 class BlueberryBlock(nn.Module):
-    def __init__(self, d_model: int, n_heads: int, n_kv_heads: int, d_ff: int, max_seq_len: int, dropout: float = 0.1, rope_theta: float = 10000.0):
+    def __init__(self, d_model: int, n_heads: int, n_kv_heads: int, d_ff: int, max_seq_len: int, n_layers: int, layer_idx: int, dropout: float = 0.1, rope_theta: float = 10000.0):
         super().__init__()
         
         self.input_norm = nn.RMSNorm(d_model)
@@ -95,7 +105,7 @@ class BlueberryBlock(nn.Module):
         self.post_attention_norm = nn.RMSNorm(d_model)
         
         self.pre_feedforward_norm = nn.RMSNorm(d_model)
-        self.feed_forward = BlueberryMLP(d_model, d_ff, dropout)
+        self.feed_forward = BlueberryMLP(d_model, d_ff, n_layers, layer_idx, dropout)
         self.post_feedforward_norm = nn.RMSNorm(d_model)
         
         self.dropout = nn.Dropout(dropout)
@@ -118,8 +128,8 @@ class Blueberry(nn.Module):
         self.position_dropout = nn.Dropout(config.dropout)
 
         self.transformer_blocks = nn.ModuleList([
-            BlueberryBlock(config.d_model, config.n_heads, config.n_kv_heads, config.d_ff, config.max_seq_len, config.dropout, config.rope_theta)
-            for _ in range(config.n_layers)
+            BlueberryBlock(config.d_model, config.n_heads, config.n_kv_heads, config.d_ff, config.max_seq_len, config.n_layers, layer_idx, config.dropout, config.rope_theta)
+            for layer_idx in range(config.n_layers)
         ])
 
         self.norm = nn.RMSNorm(config.d_model)
@@ -134,7 +144,7 @@ class Blueberry(nn.Module):
         
         # Depth-aware init
         for i, block in enumerate(self.transformer_blocks):
-            std = 0.02 + (i / (config.n_layers - 1)) * 0.04 if config.n_layers > 1 else 0.02
+            std = 0.04 - (i / (config.n_layers - 1)) * 0.04 if config.n_layers > 1 else 0.02
             # torch.nn.init.normal_(block.attention.qkv.weight, mean=0.0, std=std)
             torch.nn.init.normal_(block.feed_forward.w1.weight, mean=0.0, std=std)
             torch.nn.init.normal_(block.feed_forward.w2.weight, mean=0.0, std=std)
