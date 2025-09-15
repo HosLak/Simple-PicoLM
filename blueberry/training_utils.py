@@ -226,7 +226,7 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
           f"Val PPL: {final_eval['val_perplexity']:.2f}")
 
     # Print stored losses
-    print("\n📈 Train Losses:", [f"{x:.4f}" for x in train_losses])
-    print("📈 Validation Losses:", [f"{x:.4f}" for x in val_losses])
+    print("\n Train Losses:", [f"{x:.4f}" for x in train_losses])
+    print(" Validation Losses:", [f"{x:.4f}" for x in val_losses])
 
     return model, final_eval
