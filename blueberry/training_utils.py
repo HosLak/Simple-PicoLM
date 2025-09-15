@@ -68,11 +68,11 @@ def setup_muon_optimizer(model: nn.Module, config: ModelConfig):
 def save_model(model, filepath="BlueberryModel.pt"):
     """Save only model weights (for inference)"""
     torch.save(model.state_dict(), filepath)
-    print(f"💾 Model weights saved to {filepath}")
+    print(f" Model weights saved to {filepath}")
 
 def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataLoader):
     """Train the model with Muon optimizer"""
-    print(f"\n🚀 Training Small model with Muon optimizer")
+    print(f"\n Training Small model with Muon optimizer")
 
     # Initialize model
     set_seed(1337)
@@ -81,7 +81,7 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
     model = model.to(device)
 
     total_params = sum(p.numel() for p in model.parameters())
-    print(f"  📊 Total parameters: {total_params:,}")
+    print(f"   Total parameters: {total_params:,}")
 
     # Setup optimizers
     optimizers = setup_muon_optimizer(model, config)
@@ -189,11 +189,11 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
     pbar.close()
 
     training_time = time.time() - start_time
-    print(f"  ⏱️ Training completed in {training_time:.1f} seconds")
+    print(f"   Training completed in {training_time:.1f} seconds")
 
     # Final evaluation
     final_eval = evaluate_model(model, val_loader, config)
-    print(f"  📊 Final - Loss: {final_eval['val_loss']:.4f}, "
+    print(f"   Final - Loss: {final_eval['val_loss']:.4f}, "
           f"Acc: {final_eval['val_accuracy']:.4f}, PPL: {final_eval['val_perplexity']:.2f}")
 
     return model, final_eval

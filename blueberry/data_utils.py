@@ -12,23 +12,21 @@ import pickle
 from .config import ModelConfig
 
 def set_seed(seed: int = 1337):
-    """Set all random seeds for reproducibility"""
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
-    print(f"🌱 Set all seeds to {seed}")
+    print(f"Set all seeds to {seed}")
 
 def load_and_cache_data(config: ModelConfig, cache_dir: str = "data_cache"):
-    """Load and cache tokenized data to avoid reprocessing"""
     os.makedirs(cache_dir, exist_ok=True)
     cache_file = f"{cache_dir}/tokenized_data_{config.max_tokens}.pkl"
 
     # Check if cached data exists
     if os.path.exists(cache_file):
-        print(f"📦 Loading cached data from {cache_file}")
+        print(f"Loading cached data from {cache_file}")
         with open(cache_file, 'rb') as f:
             cached_data = pickle.load(f)
 
@@ -37,10 +35,10 @@ def load_and_cache_data(config: ModelConfig, cache_dir: str = "data_cache"):
         tokens = cached_data['tokens']
         config.vocab_size = tokenizer.vocab_size
 
-        print(f"✅ Loaded {len(texts)} Stories, {len(tokens):,} tokens from cache")
+        print(f"Loaded {len(texts)} Stories, {len(tokens):,} tokens from cache")
         return texts, tokenizer, tokens
 
-    print(f"🔄 Processing new data (will cache for future use)")
+    print(f"Processing new data (will cache for future use)")
 
     # Load tokenizer
     tokenizer = AutoTokenizer.from_pretrained("Hosseinlack123/Blueberry-testtokenizer")
@@ -68,7 +66,7 @@ def load_and_cache_data(config: ModelConfig, cache_dir: str = "data_cache"):
     with open(cache_file, 'wb') as f:
         pickle.dump(cached_data, f)
 
-    print(f"💾 Cached data to {cache_file}")
+    print(f"Cached data to {cache_file}")
     return texts, tokenizer, all_tokens
 
 class TextTokenDataset(Dataset):
