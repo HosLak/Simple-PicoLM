@@ -220,7 +220,7 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
     final_train_eval = evaluate_model(model, train_loader, config)
     val_losses.append(final_eval['val_loss'])
     train_losses.append(final_train_eval['val_loss'])
-    print(f"  📊 Final - Val Loss: {final_eval['val_loss']:.4f}, "
+    print(f"   Final - Val Loss: {final_eval['val_loss']:.4f}, "
           f"Train Loss: {final_train_eval['val_loss']:.4f}, "
           f"Val Acc: {final_eval['val_accuracy']:.4f}, "
           f"Val PPL: {final_eval['val_perplexity']:.2f}")
