@@ -1,4 +1,4 @@
-from blueberry.train import main
+from PicoLM.train import main
 
 if __name__ == "__main__":
     main()
