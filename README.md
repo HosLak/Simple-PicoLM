@@ -92,12 +92,12 @@ Once the architecture is finalized, we plan to scale up to the following hyperpa
 
 1. Clone the repository:
 ```bash
-!git clone https://github.com/HosLak/PicoLM-LLM.git
+!git clone https://github.com/HosLak/PicoLM.git
 ```
 
 2. Change into the project directory:
 ```bash
-%cd PicoLM-LLM
+%cd PicoLM
 ```
 
 3. Run training:
