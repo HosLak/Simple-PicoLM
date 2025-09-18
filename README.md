@@ -1,8 +1,8 @@
-# Blueberry-AI
+# PicoLM-AI
 Train a GPT-4-level LLM on the whole internet for $100 by 2029
 
 ## Overview
-Blueberry-AI is an experimental large language model (LLM) project aiming to train a GPT-4-level model efficiently and cost-effectively. The goal is to optimize both speed and reasoning capabilities, exploring new architectures and optimization techniques.
+PicoLM-AI is an experimental large language model (LLM) project aiming to train a GPT-4-level model efficiently and cost-effectively. The goal is to optimize both speed and reasoning capabilities, exploring new architectures and optimization techniques.
 
 ## Features
 - **Efficient Transformer Architecture**: Optimized for fast training.
@@ -34,8 +34,8 @@ Blueberry-AI is an experimental large language model (LLM) project aiming to tra
 - **Muon Optimizer**: Orthogonalized momentum for efficient gradient updates.
 - **Automatic Mixed Precision (AMP)**: Reduces memory usage and speeds up training.
 - **Multi-GPU Support**: Enables distributed training for scalability.
-- **Dataset**: Uses the [Hosseinlack123/Blueberry-testdataset](https://huggingface.co/datasets/Hosseinlack123/Blueberry-testdataset) for training.
-- **Tokenizer**: Employs a custom BPE tokenizer with a vocabulary size of 24,576 ([Hosseinlack123/Blueberry-testtokenizer](https://huggingface.co/Hosseinlack123/Blueberry-testtokenizer)).
+- **Dataset**: Uses the [Hosseinlack123/PicoLM-testdataset](https://huggingface.co/datasets/Hosseinlack123/PicoLM-testdataset) for training.
+- **Tokenizer**: Employs a custom BPE tokenizer with a vocabulary size of 24,576 ([Hosseinlack123/PicoLM-testtokenizer](https://huggingface.co/Hosseinlack123/PicoLM-testtokenizer)).
 
 Training Results
 
@@ -82,7 +82,7 @@ Once the architecture is finalized, we plan to scale up to the following hyperpa
 
 # Future Roadmap
 
-**We are actively working on improving the Blueberry-AI model.** Planned enhancements include:
+**We are actively working on improving the PicoLM-AI model.** Planned enhancements include:
 
 - **Stepwise Think Fine-Tuning**: The model will be fine-tuned using the Stepwise Think format to enhance reasoning capabilities and achieve faster, high-quality responses. For more details on this approach, see [Stepwise Think: Revolutionizing Chain-of-Thought for Faster AI Responses Without Sacrificing Quality](https://medium.com/@hosseinlack123/stepwise-think-revolutionizing-chain-of-thought-for-faster-ai-responses-without-sacrificing-d81e140789b6).
 
@@ -92,12 +92,12 @@ Once the architecture is finalized, we plan to scale up to the following hyperpa
 
 1. Clone the repository:
 ```bash
-!git clone https://github.com/HosLak/Blueberry-LLM.git
+!git clone https://github.com/HosLak/PicoLM-LLM.git
 ```
 
 2. Change into the project directory:
 ```bash
-%cd Blueberry-LLM
+%cd PicoLM-LLM
 ```
 
 3. Run training:
