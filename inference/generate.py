@@ -21,6 +21,7 @@ class TextGenerator:
         
         # Load tokenizer
         self.tokenizer = AutoTokenizer.from_pretrained("Hosseinlack123/PicoLM-tokenizer")
+        self.tokenizer.eos_token = '<story_end>'
         
         # Initialize config and model
         self.config = ModelConfig()

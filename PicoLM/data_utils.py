@@ -42,6 +42,7 @@ def load_and_cache_data(config: ModelConfig, cache_dir: str = "data_cache"):
 
     # Load tokenizer
     tokenizer = AutoTokenizer.from_pretrained("Hosseinlack123/PicoLM-tokenizer")
+    tokenizer.eos_token = '<story_end>'
 
     # Load dataset
     dataset = load_dataset("Hosseinlack123/PicoLM-dataset")['train']
@@ -54,7 +55,7 @@ def load_and_cache_data(config: ModelConfig, cache_dir: str = "data_cache"):
     print("Tokenizing texts...")
     all_tokens = []
     for text in tqdm(texts, desc="Tokenizing"):
-        tokens = tokenizer.encode(text+'\n\n\n', add_special_tokens=False)
+        tokens = tokenizer.encode(text + tokenizer.eos_token, add_special_tokens=False)
         all_tokens.extend(tokens)
 
     all_tokens = all_tokens[:config.max_tokens]
