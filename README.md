@@ -34,8 +34,8 @@ PicoLM-AI is an experimental large language model (LLM) project aiming to train 
 - **Muon Optimizer**: Orthogonalized momentum for efficient gradient updates.
 - **Automatic Mixed Precision (AMP)**: Reduces memory usage and speeds up training.
 - **Multi-GPU Support**: Enables distributed training for scalability.
-- **Dataset**: Uses the [Hosseinlack123/PicoLM-testdataset](https://huggingface.co/datasets/Hosseinlack123/PicoLM-testdataset) for training.
-- **Tokenizer**: Employs a custom BPE tokenizer with a vocabulary size of 24,576 ([Hosseinlack123/PicoLM-testtokenizer](https://huggingface.co/Hosseinlack123/PicoLM-testtokenizer)).
+- **Dataset**: Uses the [Hosseinlack123/PicoLM-dataset](https://huggingface.co/datasets/Hosseinlack123/PicoLM-dataset) for training.
+- **Tokenizer**: Employs a custom BPE tokenizer with a vocabulary size of 24,576 ([Hosseinlack123/PicoLM-tokenizer](https://huggingface.co/Hosseinlack123/PicoLM-tokenizer)).
 
 Training Results
 
