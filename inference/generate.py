@@ -7,27 +7,27 @@ import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from blueberry.config import ModelConfig
-from blueberry.model import Blueberry
+from PicoLM.config import ModelConfig
+from PicoLM.model import PicoLM
 
 
 import warnings
 warnings.filterwarnings('ignore')
 
 class TextGenerator:
-    def __init__(self, model_path: str = "BlueberryModel.pt", device: str = None):
+    def __init__(self, model_path: str = "PicoLMModel.pt", device: str = None):
         """Initialize the text generator with a trained model"""
         self.device = device if device else ('cuda' if torch.cuda.is_available() else 'cpu')
         
         # Load tokenizer
-        self.tokenizer = AutoTokenizer.from_pretrained("Hosseinlack123/Blueberry-testtokenizer")
+        self.tokenizer = AutoTokenizer.from_pretrained("Hosseinlack123/Pico-tokenizer")
         
         # Initialize config and model
         self.config = ModelConfig()
         self.config.vocab_size = self.tokenizer.vocab_size
         
         # Load model
-        self.model = Blueberry(self.config).to(self.device)
+        self.model = PicoLM(self.config).to(self.device)
         self.model.load_state_dict(torch.load(model_path, map_location=self.device))
         self.model.eval()
         
@@ -108,7 +108,7 @@ class TextGenerator:
     
     def interactive_generate(self):
         """Interactive text generation in terminal"""
-        print("\n🤖 Blueberry Text Generator")
+        print("\n🤖 PicoLM Text Generator")
         print("Type 'quit' to exit\n")
         
         while True:
@@ -134,7 +134,7 @@ class TextGenerator:
 
 def main():
     # Example usage
-    generator = TextGenerator("BlueberryModel.pt")
+    generator = TextGenerator("PicoLMModel.pt")
     
     ## Simple generation
     # prompt = "Once upon a time"

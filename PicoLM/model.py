@@ -7,7 +7,7 @@ from .config import ModelConfig
 from .data_utils import set_seed
 
 
-class BlueberryRotary(nn.Module):
+class PicoRotary(nn.Module):
     def __init__(self, dim: int, max_seq_len: int, rope_theta: float = 10000.0):
         super().__init__()
         angular_freq = (1 / rope_theta) ** torch.linspace(0, 1, steps=dim//4, dtype=torch.float32)
@@ -25,7 +25,7 @@ class BlueberryRotary(nn.Module):
         y2 = x1 * (-sin) + x2 * cos
         return torch.cat((y1, y2), 3).type_as(x_BTHD)
 
-class BlueberryAttn(nn.Module):
+class PicoAttn(nn.Module):
     def __init__(self, d_model: int, n_heads: int, n_kv_heads: int, max_seq_len: int, dropout: float = 0.1, rope_theta: float = 10000.0):
         super().__init__()
         self.d_model = d_model
@@ -45,7 +45,7 @@ class BlueberryAttn(nn.Module):
         self.q_norm = nn.RMSNorm(self.d_k, eps=1e-6)
         self.k_norm = nn.RMSNorm(self.d_k, eps=1e-6)
         
-        self.rotary = BlueberryRotary(self.d_k, max_seq_len, rope_theta)
+        self.rotary = PicoRotary(self.d_k, max_seq_len, rope_theta)
         self.dropout = dropout
         
     def forward(self, x):
@@ -78,7 +78,7 @@ class BlueberryAttn(nn.Module):
         attn_output = attn_output.transpose(1, 2).reshape(batch_size, seq_len, self.d_model)
         return self.w_o(attn_output)
 
-class BlueberryMLP(nn.Module):
+class PicoMLP(nn.Module):
     def __init__(self, d_model: int, d_ff: int, n_layers: int, layer_idx: int, dropout: float = 0.1):
         super().__init__()
 
@@ -96,16 +96,16 @@ class BlueberryMLP(nn.Module):
         return self.w2(self.dropout(F.silu(self.w1(x)) * self.w3(x)))
     
 
-class BlueberryBlock(nn.Module):
+class PicoBlock(nn.Module):
     def __init__(self, d_model: int, n_heads: int, n_kv_heads: int, d_ff: int, max_seq_len: int, n_layers: int, layer_idx: int, dropout: float = 0.1, rope_theta: float = 10000.0):
         super().__init__()
         
         self.input_norm = nn.RMSNorm(d_model)
-        self.attention = BlueberryAttn(d_model, n_heads, n_kv_heads, max_seq_len, dropout, rope_theta)
+        self.attention = PicoAttn(d_model, n_heads, n_kv_heads, max_seq_len, dropout, rope_theta)
         self.post_attention_norm = nn.RMSNorm(d_model)
         
         self.pre_feedforward_norm = nn.RMSNorm(d_model)
-        self.feed_forward = BlueberryMLP(d_model, d_ff, n_layers, layer_idx, dropout)
+        self.feed_forward = PicoMLP(d_model, d_ff, n_layers, layer_idx, dropout)
         self.post_feedforward_norm = nn.RMSNorm(d_model)
         
         self.dropout = nn.Dropout(dropout)
@@ -118,7 +118,7 @@ class BlueberryBlock(nn.Module):
         
         return x + self.dropout(ff_out)
 
-class Blueberry(nn.Module):
+class PicoLM(nn.Module):
     def __init__(self, config: ModelConfig):
         super().__init__()
         set_seed(1337)
@@ -128,7 +128,7 @@ class Blueberry(nn.Module):
         self.position_dropout = nn.Dropout(config.dropout)
 
         self.transformer_blocks = nn.ModuleList([
-            BlueberryBlock(config.d_model, config.n_heads, config.n_kv_heads, config.d_ff, config.max_seq_len, config.n_layers, layer_idx, config.dropout, config.rope_theta)
+            PicoBlock(config.d_model, config.n_heads, config.n_kv_heads, config.d_ff, config.max_seq_len, config.n_layers, layer_idx, config.dropout, config.rope_theta)
             for layer_idx in range(config.n_layers)
         ])
 

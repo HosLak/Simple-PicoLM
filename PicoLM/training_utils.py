@@ -8,7 +8,7 @@ import time
 from tqdm import tqdm
 
 from .config import ModelConfig
-from .model import Blueberry, Muon
+from .model import PicoLM, Muon
 from .data_utils import set_seed
 
 def evaluate_model(model: nn.Module, val_loader: DataLoader, config: ModelConfig):
@@ -65,7 +65,7 @@ def setup_muon_optimizer(model: nn.Module, config: ModelConfig):
 
     return [muon_optimizer, adamw_optimizer]
 
-def save_model(model, filepath="BlueberryModel.pt"):
+def save_model(model, filepath="PicoLMModel.pt"):
     """Save only model weights (for inference)"""
     torch.save(model.state_dict(), filepath)
     print(f" Model weights saved to {filepath}")
@@ -76,7 +76,7 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
 
     # Initialize model
     set_seed(1337)
-    model = Blueberry(config)
+    model = PicoLM(config)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = model.to(device)
 

@@ -41,10 +41,10 @@ def load_and_cache_data(config: ModelConfig, cache_dir: str = "data_cache"):
     print(f"Processing new data (will cache for future use)")
 
     # Load tokenizer
-    tokenizer = AutoTokenizer.from_pretrained("Hosseinlack123/Blueberry-testtokenizer")
+    tokenizer = AutoTokenizer.from_pretrained("Hosseinlack123/PicoLM-tokenizer")
 
     # Load dataset
-    dataset = load_dataset("Hosseinlack123/Blueberry-testdataset")['train']
+    dataset = load_dataset("Hosseinlack123/PicoLM-dataset")['train']
 
     texts = []
     for i, item in enumerate(dataset):
