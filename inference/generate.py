@@ -20,7 +20,7 @@ class TextGenerator:
         self.device = device if device else ('cuda' if torch.cuda.is_available() else 'cpu')
         
         # Load tokenizer
-        self.tokenizer = AutoTokenizer.from_pretrained("Hosseinlack123/Pico-tokenizer")
+        self.tokenizer = AutoTokenizer.from_pretrained("Hosseinlack123/PicoLM-tokenizer")
         
         # Initialize config and model
         self.config = ModelConfig()
