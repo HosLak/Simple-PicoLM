@@ -20,7 +20,7 @@ PicoLM-AI is an experimental large language model (LLM) project aiming to train 
 - **Rotary Positional Embeddings (RoPE)**: Efficiently encodes positional information for long sequences.
 - **Grouped-Query Attention (GQA)**: Reduces memory usage while maintaining attention quality.
 - **Gated Linear Unit (GLU)**: Enhances feed-forward expressivity with SiLU activation.
-- PyramidNet MLP Structure: Incorporates pyramidal MLPs to improve training efficiency by progressively increasing dimensionality in feed-forward layers, balancing computational cost and model capacity. See [PyramidNet: A Technique for Efficient Transformer Training with Pyramidal MLPs](https://medium.com/@hosseinlack123/pyramidnet-a-technique-for-efficient-transformer-training-with-pyramidal-mlps-a3caa85918ae) for details.
+- **PyramidNet MLP Structure**: Incorporates pyramidal MLPs to improve training efficiency by progressively increasing dimensionality in feed-forward layers, balancing computational cost and model capacity. See [PyramidNet: A Technique for Efficient Transformer Training with Pyramidal MLPs](https://medium.com/@hosseinlack123/pyramidnet-a-technique-for-efficient-transformer-training-with-pyramidal-mlps-a3caa85918ae) for details.
 - **QK normalization**: Applied for better stability.
 - **RMSNorm Stabilization**: Applied pre- and post-attention/feed-forward for robust training.
 - **Untied Embedding Weights**: Separate token embedding and output projection for flexibility.
