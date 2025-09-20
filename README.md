@@ -1,8 +1,8 @@
 # PicoLM-AI
-Train a GPT-4-level LLM on the whole internet for $100 by 2029
+Developing more efficient Transformer architectures for language tasks, aiming to drastically reduce model size while preserving high performance.
 
 ## Overview
-PicoLM-AI is an experimental large language model (LLM) project aiming to train a GPT-4-level model efficiently and cost-effectively. The goal is to optimize both speed and reasoning capabilities, exploring new architectures and optimization techniques.
+PicoLM-AI is an experimental small language model (SLM) project aiming to train a GPT model efficiently and cost-effectively. The goal is to optimize both speed and reasoning capabilities, exploring new architectures and optimization techniques.
 
 ## Features
 - **Efficient Transformer Architecture**: Optimized for fast training.
@@ -109,9 +109,6 @@ Once the architecture is finalized, we plan to scale up to the following hyperpa
 ```bash
 !python inference.py
 ```
-
-# Contributing
-Feel free to contribute new ideas, experiments, or optimizations. Check the issues and discussions tab for ongoing experiments.
 
 # License
 This project is licensed under the **MIT License** - see the LICENSE file for details.
