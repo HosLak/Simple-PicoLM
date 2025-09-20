@@ -53,12 +53,15 @@ def load_and_cache_data(config: ModelConfig, cache_dir: str = "data_cache"):
     
     # Tokenize
     print("Tokenizing texts...")
+    max_tokens = config.max_tokens
     all_tokens = []
     for text in tqdm(texts, desc="Tokenizing"):
         tokens = tokenizer.encode(text + tokenizer.eos_token, add_special_tokens=False)
         all_tokens.extend(tokens)
+        if len(all_tokens) >= max_tokens:
+            break 
 
-    all_tokens = all_tokens[:config.max_tokens]
+    all_tokens = all_tokens[:max_tokens]
     print(f"Using {len(all_tokens):,} tokens")
     config.vocab_size = tokenizer.vocab_size
 
