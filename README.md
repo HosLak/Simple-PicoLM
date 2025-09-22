@@ -89,7 +89,7 @@ Once the architecture is finalized, I plan to scale up to the following hyperpar
 
 # Future Roadmap
 
-**We are actively working on improving the PicoLM-AI model.** Planned enhancements include:
+**We are actively working on improving the Simple-PicoLM model.** Planned enhancements include:
 
 - **Stepwise Think Fine-Tuning**: The model will be fine-tuned using the Stepwise Think format to enhance reasoning capabilities and achieve faster, high-quality responses. For more details on this approach, see [Stepwise Think: Revolutionizing Chain-of-Thought for Faster AI Responses Without Sacrificing Quality](https://medium.com/@hosseinlack123/stepwise-think-revolutionizing-chain-of-thought-for-faster-ai-responses-without-sacrificing-d81e140789b6).
 
@@ -99,12 +99,12 @@ Once the architecture is finalized, I plan to scale up to the following hyperpar
 
 1. Clone the repository:
 ```bash
-!git clone https://github.com/HosLak/PicoLM.git
+!git clone https://github.com/HosLak/Simple-PicoLM.git
 ```
 
 2. Change into the project directory:
 ```bash
-%cd PicoLM
+%cd Simple-PicoLM
 ```
 
 3. Run training:
