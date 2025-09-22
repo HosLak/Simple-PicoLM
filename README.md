@@ -1,8 +1,14 @@
-# PicoLM-AI
+# Simple-PicoLM
 Developing more efficient Transformer architectures for language tasks, aiming to drastically reduce model size while preserving high performance.
 
 ## Overview
-PicoLM-AI is an experimental small language model (SLM) project aiming to train a GPT model efficiently and cost-effectively. The goal is to optimize both speed and reasoning capabilities, exploring new architectures and optimization techniques.
+Simple-PicoLM is an small language model (SLM) project designed to train GPT-like models efficiently and cost-effectively. Its goal is to balance speed and reasoning capabilities while exploring new architectures and optimization techniques. Unlike large and complex models, Simple-PicoLM emphasizes efficiency, simplicity, and low resource consumption, making it well-suited for both specific and general tasks, as well as custom tools or resource-constrained environments.
+
+### Key Difference from the Main PicoLM:
+- PicoLM is a more complete and commercial project with advanced features.
+- simple-PicoLM is its open-source and non-commercial version, providing the base code to the community, but excluding some key architectural details (such as specific optimizations or advanced modules) to preserve intellectual property rights.
+
+However, simple-PicoLM also performs well in general tasks like everyday chats or content generation—it doesn't fall short!
 
 ## Features
 - **Efficient Transformer Architecture**: Optimized for fast training.
@@ -14,6 +20,7 @@ PicoLM-AI is an experimental small language model (SLM) project aiming to train 
 - **Modular Code Structure**: Easy experimentation and extension.
 - **Optimizer Flexibility**: Supports AdamW and Muon.
 - **Lightweight Inference**: Can run efficiently on Colab T4 GPU.
+- **Open-Source**: Base code available on GitHub, with MIT license.
 
 ## Architecture
 - **Decoder-Only Transformer**: Optimized for autoregressive language modeling.
@@ -109,6 +116,14 @@ Once the architecture is finalized, I plan to scale up to the following hyperpar
 ```bash
 !python inference.py
 ```
+
+#
+
+Limitations
+
+- This is a simplified version and lacks some advanced features of PicoLM (such as specific optimizations or support for very large models).
+- For commercial use, refer to the main PicoLM project.
+- The model may require additional tuning for highly complex tasks.
 
 # License
 This project is licensed under the **MIT License** - see the LICENSE file for details.
