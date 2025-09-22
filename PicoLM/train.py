@@ -18,7 +18,7 @@ def main():
     # Set seed
     set_seed(1337)
 
-    # Create config for Small model
+    # Create config
     config = ModelConfig()
     print(f"\nModel Configuration:")
     print(f"   Architecture: {config.d_model}d, {config.n_layers}L, {config.n_heads}H, {config.d_ff}ff")

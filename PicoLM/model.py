@@ -145,7 +145,6 @@ class PicoLM(nn.Module):
         # Depth-aware init
         for i, block in enumerate(self.transformer_blocks):
             std = 0.04 - (i / (config.n_layers - 1)) * 0.04 if config.n_layers > 1 else 0.02
-            # torch.nn.init.normal_(block.attention.qkv.weight, mean=0.0, std=std)
             torch.nn.init.normal_(block.feed_forward.w1.weight, mean=0.0, std=std)
             torch.nn.init.normal_(block.feed_forward.w2.weight, mean=0.0, std=std)
 

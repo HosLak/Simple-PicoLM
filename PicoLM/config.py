@@ -39,8 +39,8 @@ class ModelConfig:
     vocab_size: Optional[int] = None
 
     def __post_init__(self):
-        self.d_k = self.d_model // self.n_heads
         assert self.d_model % self.n_heads == 0, "d_model must be divisible by n_heads"
+        self.d_k = self.d_model // self.n_heads
         
         # Set stride conditionally
         if self.max_tokens > 10000000:
@@ -51,4 +51,5 @@ class ModelConfig:
         # Set d_ff to 4 times d_model
         self.d_ff = int(self.multiple_of * int((((self.d_model * 4 * 2 / 3) * 1.3) + self.multiple_of + 1) // self.multiple_of))
         
+        assert self.n_heads % 4 == 0, "n_heads must be divisible by 4"
         self.n_kv_heads = self.n_heads // 4
