@@ -22,7 +22,7 @@ def set_seed(seed: int = 1337):
 
 def load_and_cache_data(config: ModelConfig, cache_dir: str = "data_cache"):
     os.makedirs(cache_dir, exist_ok=True)
-    cache_file = f"{cache_dir}/tokenized_data_{config.max_tokens}.pkl"
+    cache_file = f"{cache_dir}/tokenized_{config.dataset_name.split('/')[-1]}_{config.max_tokens}.pkl"
 
     # Check if cached data exists
     if os.path.exists(cache_file):
@@ -45,7 +45,7 @@ def load_and_cache_data(config: ModelConfig, cache_dir: str = "data_cache"):
     tokenizer.eos_token = '<story_end>'
 
     # Load dataset
-    dataset = load_dataset("Hosseinlack123/PicoLM-dataset")['train']
+    dataset = load_dataset(config.dataset_name)['train']
 
     texts = []
     for i, item in enumerate(dataset):
@@ -54,11 +54,13 @@ def load_and_cache_data(config: ModelConfig, cache_dir: str = "data_cache"):
     # Tokenize
     print("Tokenizing texts...")
     max_tokens = config.max_tokens
+    
     all_tokens = []
     for text in tqdm(texts, desc="Tokenizing"):
         tokens = tokenizer.encode(text + tokenizer.eos_token, add_special_tokens=False)
         all_tokens.extend(tokens)
-        if len(all_tokens) >= max_tokens:
+        
+        if max_tokens != -1 and len(all_tokens) >= max_tokens:
             break 
 
     all_tokens = all_tokens[:max_tokens]

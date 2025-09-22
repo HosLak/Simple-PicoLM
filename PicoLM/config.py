@@ -22,7 +22,8 @@ class ModelConfig:
     max_seq_len: int = 256
     multiple_of: int = 128
     stride: int = field(init=False)
-    max_tokens: int = 21413859 # 21,413,859 if you want to ues entire of dataset
+    max_tokens: int = -1 # -1 if you want to ues entire of dataset
+    dataset_name: str = "Hosseinlack123/PicoLM-dataset"
 
     # Evaluation
     eval_every: int = 150
