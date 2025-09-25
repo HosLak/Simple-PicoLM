@@ -79,7 +79,8 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
     model = PicoLM(config)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = model.to(device)
-    model = torch.compile(model)
+
+    model_compiled  = torch.compile(model) 
 
     total_params = sum(p.numel() for p in model.parameters())
     print(f"   Total parameters: {total_params:,}")
@@ -114,20 +115,20 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
     val_losses = []
 
     # Compute initial validation and train loss
-    model.eval()
-    initial_eval = evaluate_model(model, val_loader, config)
+    model_compiled.eval()
+    initial_eval = evaluate_model(model_compiled, val_loader, config)
     val_losses.append(initial_eval['val_loss'])
     print(f"\nInitial Val Loss: {initial_eval['val_loss']:.4f}, "
           f"Val Acc: {initial_eval['val_accuracy']:.4f}, "
           f"Val PPL: {initial_eval['val_perplexity']:.2f}")
 
     # Compute initial train loss using evaluate_model
-    initial_train_eval = evaluate_model(model, train_loader, config)
+    initial_train_eval = evaluate_model(model_compiled, train_loader, config)
     train_losses.append(initial_train_eval['val_loss'])
     print(f"Initial Train Loss: {initial_train_eval['val_loss']:.4f}")
 
     # Training loop
-    model.train()
+    model_compiled.train()
     step = 0
     start_time = time.time()
     best_val_loss = float('inf')
@@ -144,12 +145,12 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
             # Forward pass with gradient accumulation
             if config.use_amp:
                 with autocast():
-                    logits = model(x)
+                    logits = model_compiled(x)
                     loss = F.cross_entropy(logits.view(-1, config.vocab_size), y.view(-1))
                     loss = loss / config.gradient_accumulation_steps
                 scaler.scale(loss).backward()
             else:
-                logits = model(x)
+                logits = model_compiled(x)
                 loss = F.cross_entropy(logits.view(-1, config.vocab_size), y.view(-1))
                 loss = loss / config.gradient_accumulation_steps
                 loss.backward()
@@ -159,7 +160,7 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
                 if config.use_amp:
                     for optimizer in optimizers:
                         scaler.unscale_(optimizer)
-                    grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), config.grad_clip)
+                    grad_norm = torch.nn.utils.clip_grad_norm_(model_compiled.parameters(), config.grad_clip)
 
                     for optimizer in optimizers:
                         scaler.step(optimizer)
@@ -168,7 +169,7 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
                         scheduler.step()
                     scaler.update()
                 else:
-                    grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), config.grad_clip)
+                    grad_norm = torch.nn.utils.clip_grad_norm_(model_compiled.parameters(), config.grad_clip)
                     for optimizer in optimizers:
                         optimizer.step()
                         optimizer.zero_grad()
@@ -192,16 +193,16 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
 
             # Evaluation
             if step % config.eval_every == 0 and step > 0:
-                model.eval()
-                eval_metrics = evaluate_model(model, val_loader, config)
+                model_compiled.eval()
+                eval_metrics = evaluate_model(model_compiled, val_loader, config)
                 val_losses.append(eval_metrics['val_loss'])
-                train_eval_metrics = evaluate_model(model, train_loader, config)
+                train_eval_metrics = evaluate_model(model_compiled, train_loader, config)
                 train_losses.append(train_eval_metrics['val_loss'])
                 print(f"\nStep {step}: Val Loss: {eval_metrics['val_loss']:.4f}, "
                       f"Train Loss: {train_eval_metrics['val_loss']:.4f}, "
                       f"Val Acc: {eval_metrics['val_accuracy']:.4f}, "
                       f"Val PPL: {eval_metrics['val_perplexity']:.2f}")
-                model.train()
+                model_compiled.train()
 
                 if eval_metrics['val_loss'] < best_val_loss:
                     best_val_loss = eval_metrics['val_loss']
@@ -216,9 +217,9 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
     print(f"   Training completed in {training_time:.1f} seconds")
 
     # Final evaluation
-    model.eval()
-    final_eval = evaluate_model(model, val_loader, config)
-    final_train_eval = evaluate_model(model, train_loader, config)
+    model_compiled.eval()
+    final_eval = evaluate_model(model_compiled, val_loader, config)
+    final_train_eval = evaluate_model(model_compiled, train_loader, config)
     val_losses.append(final_eval['val_loss'])
     train_losses.append(final_train_eval['val_loss'])
     print(f"   Final - Val Loss: {final_eval['val_loss']:.4f}, "
