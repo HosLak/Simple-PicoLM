@@ -174,7 +174,6 @@ class PicoLM(nn.Module):
         return logits
     
     
-# @torch.compile
 def zeropower_via_newtonschulz5(G: torch.Tensor, steps: int = 5) -> torch.Tensor:
     """Newton-Schulz iteration to compute the zeroth power / orthogonalization of G."""
     assert G.ndim >= 2
