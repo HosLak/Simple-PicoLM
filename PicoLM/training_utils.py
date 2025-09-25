@@ -79,6 +79,7 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
     model = PicoLM(config)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = model.to(device)
+    model = torch.compile(model)
 
     total_params = sum(p.numel() for p in model.parameters())
     print(f"   Total parameters: {total_params:,}")
