@@ -39,6 +39,7 @@ However, simple-PicoLM also performs well in general tasks like everyday chats o
 - **Scaled Embedding Input**: Normalizes token embeddings by sqrt(d_model) for stability.
 - **Better LR Scheduler**: Improved learning rate scheduling.
 - **Gated Attention (SDPA Output G1)**: Applies a head-specific, elementwise sigmoid gate after Scaled Dot-Product Attention (SDPA) outputs, calculated based on Query (Q).
+- **Biases**: Disable all bias terms in feed-forward networks and multi-head self-attention layers, except for the biases in the query, key, and value projections.
 
 ## Training
 - **Muon Optimizer**: Orthogonalized momentum for efficient gradient updates.
