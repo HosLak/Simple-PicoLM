@@ -28,7 +28,7 @@ class TextGenerator:
         self.config.vocab_size = self.tokenizer.vocab_size
         
         # Load model
-        self.model = PicoLM(self.config).to(self.device)
+        self.model = torch.compile(PicoLM(self.config).to(self.device))
         self.model.load_state_dict(torch.load(model_path, map_location=self.device))
         self.model.eval()
         
