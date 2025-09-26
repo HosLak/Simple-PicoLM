@@ -5,14 +5,14 @@ from typing import Optional
 class ModelConfig:
     # Model architecture
     d_model: int = 256
-    n_heads: int = 8
+    n_heads: int = 4
     n_kv_heads: int = field(init=False)
     n_layers: int = 8
     
     d_ff: int = field(init=False)
     batch_size: int = 16
     max_steps: int = 1500 # max_tokens // (batch_size * gradient_accumulation_steps * max_seq_len) = 1 epoch
-    rope_theta: float = 10000.0
+    rope_theta: float = 100000.0
 
     # Training parameters
     gradient_accumulation_steps: int = 4 # 16 * 4 = 64
@@ -30,7 +30,7 @@ class ModelConfig:
     eval_steps: int = 30
 
     # Regularization
-    weight_decay: float = 0.1
+    weight_decay: float = 0.01
     dropout: float = 0.0
     grad_clip: float = 1.0
 
