@@ -54,6 +54,9 @@ class TextGenerator:
             top_p: Cumulative probability for nucleus sampling
             repetition_penalty: Penalty for repeating tokens
         """
+        
+        prompt = "Once upon a time" if prompt is not None else prompt
+        
         # Tokenize prompt
         input_ids = self.tokenizer.encode(prompt, add_special_tokens=False, return_tensors='pt')
         input_ids = input_ids.to(self.device)
