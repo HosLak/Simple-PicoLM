@@ -61,7 +61,7 @@ def setup_muon_optimizer(model: nn.Module, config: ModelConfig):
     print(f"  AdamW parameters: {sum(p.numel() for p in adamw_params):,}")
 
     muon_optimizer = Muon(muon_params, lr=config.muon_lr, momentum=0.95)
-    adamw_optimizer = torch.optim.AdamW(adamw_params, lr=config.muon_lr*0.1, weight_decay=config.weight_decay)
+    adamw_optimizer = torch.optim.AdamW(adamw_params, lr=config.adamw_lr, weight_decay=config.weight_decay, betas=config.adamw_betas)
 
     return [muon_optimizer, adamw_optimizer]
 
@@ -188,7 +188,8 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
                     'loss': f'{current_loss:.4f}',
                     'acc': f'{accuracy:.3f}',
                     'ppl': f'{perplexity:.1f}',
-                    'lr': f'{optimizers[0].param_groups[0]["lr"]:.2e}'
+                    'muon_lr': f'{optimizers[0].param_groups[0]["lr"]:.2e}',
+                    'adamw_lr': f'{optimizers[1].param_groups[0]["lr"]:.2e}'
                 })
 
             # Evaluation

@@ -16,7 +16,9 @@ class ModelConfig:
 
     # Training parameters
     gradient_accumulation_steps: int = 4 # 16 * 4 = 64
-    muon_lr: float = 0.01
+    muon_lr: float = 1e-2
+    adamw_lr: float = 2e-3
+    adamw_betas: tuple = (0.9, 0.95)
 
     # Data parameters
     max_seq_len: int = 256
