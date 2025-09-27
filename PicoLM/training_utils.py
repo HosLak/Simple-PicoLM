@@ -87,16 +87,24 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
     set_seed(1337)
     model = PicoLM(config)
     num_gpus = torch.cuda.device_count()
-    dist.init_process_group("nccl")
-    local_rank = torch.distributed.get_rank()
-    device = torch.device(f"cuda:{local_rank}" if num_gpus > 0 else "cuda")
+
+    if num_gpus > 1:
+        print(f"Using {num_gpus} GPUs for DDP.")
+        dist.init_process_group(backend="nccl")
+        local_rank = dist.get_rank()
+        torch.cuda.set_device(local_rank)
+        device = torch.device(f"cuda:{local_rank}")
+    else:
+        print("Using single GPU or CPU.")
+        local_rank = 0 # Default for single GPU or CPU
+        device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+
     model = model.to(device)
 
-    # Multi-GPU setup
-    torch.cuda.set_device(local_rank)
-    
     model_compiled = torch.compile(model)
-    model_compiled = DDP(model_compiled, device_ids=[local_rank])
+
+    if num_gpus > 1:
+        model_compiled = DDP(model_compiled, device_ids=[local_rank])
 
     total_params = sum(p.numel() for p in model.parameters())
     print(f"   Total parameters: {total_params:,}")
