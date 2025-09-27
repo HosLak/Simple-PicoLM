@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from torch.cuda.amp import autocast, GradScaler
+from torch.nn.parallel import DistributedDataParallel as DDP
 import math
 import time
 from tqdm import tqdm
@@ -88,7 +89,7 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
     model = model.to(device)
 
     # Multi-GPU setup
-    # num_gpus = torch.cuda.device_count()
+    num_gpus = torch.cuda.device_count()
     # if num_gpus > 1:
     #     print(f"Using {num_gpus} GPUs with DataParallel")
     #     model = torch.nn.DataParallel(model)
@@ -111,13 +112,8 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
     #         # disable=['conv_bn_fusion', 'triton_cudagraphs']
     #     )
     
-    model_compiled = torch.compile(
-        model,
-        # dynamic=False,
-        # mode='reduce-overhead',
-        # fullgraph=False,
-        # disable=['conv_bn_fusion', 'triton_cudagraphs']
-    )
+    model_compiled = torch.compile(model,)
+    model_compiled = DDP(model_compiled, device_ids=list(range(num_gpus)))
 
     total_params = sum(p.numel() for p in model.parameters())
     print(f"   Total parameters: {total_params:,}")
