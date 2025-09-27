@@ -4,6 +4,7 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from torch.cuda.amp import autocast, GradScaler
 from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.utils.data.distributed import DistributedSampler
 import torch.distributed as dist
 import math
 import time
@@ -92,6 +93,32 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
         print(f"Using {num_gpus} GPUs for DDP.")
         dist.init_process_group(backend="nccl")
         local_rank = dist.get_rank()
+        train_sampler = DistributedSampler(
+            train_loader.dataset, 
+            num_replicas=dist.get_world_size(),
+            rank=local_rank
+        )
+        val_sampler = DistributedSampler(
+            val_loader.dataset,
+            num_replicas=dist.get_world_size(), 
+            rank=local_rank
+        )
+        
+        train_loader = DataLoader(
+            train_loader.dataset,
+            batch_size=config.batch_size,
+            sampler=train_sampler,
+            num_workers=4,
+            pin_memory=True
+        )
+        val_loader = DataLoader(
+            val_loader.dataset,
+            batch_size=config.batch_size,
+            sampler=val_sampler,
+            num_workers=4,
+            pin_memory=True
+        )
+        
         torch.cuda.set_device(local_rank)
         device = torch.device(f"cuda:{local_rank}")
     else:
@@ -101,10 +128,10 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
 
     model = model.to(device)
 
-    model_compiled = torch.compile(model)
-
     if num_gpus > 1:
-        model_compiled = DDP(model_compiled, device_ids=[local_rank])
+        model = DDP(model, device_ids=[local_rank])
+        
+    model_compiled = torch.compile(model)
 
     total_params = sum(p.numel() for p in model.parameters())
     print(f"   Total parameters: {total_params:,}")
