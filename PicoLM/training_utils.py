@@ -117,7 +117,7 @@ def save_model(model, filepath="PicoLMModel.pt"):
 
 def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataLoader):
     """Train the model with Muon optimizer using DDP"""
-    print(f"\n Training Small model with Muon optimizer using DDP")
+    print(f"\n Training Small model with Muon optimizer using DDsdfsdfP")
 
     # Setup DDP
     rank, world_size, local_rank = setup_ddp()
