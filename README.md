@@ -50,19 +50,17 @@ However, simple-PicoLM also performs well in general tasks like everyday chats o
 
 Training Results
 
-Using a free Google Colab T4 runtime and only 1 minutes 28 seconds of training, the following result was achieved:
+Using a free Google Colab T4 runtime and only 1 minutes 32 seconds of training, the following result was achieved:
 
 Prompt: ```Once upon a time```
 
-Model Output (trained 1m28s on T4):
+Model Output (trained 1m32s on T4):
 ```
-Once upon a time, there was a little girl named Lily. She loved to play with her toys and play with her dolls. One day, she saw a small bird flying in the sky. 
-
-Lily wanted to catch the bird, but she was too fast for her to reach it. Suddenly, she felt a sharp pain in her hands. Lily felt very sad because she couldn't get up. She wished the bird would never be scared again. 
-
-From that day on, Lily always remembered to take care of the rest of her grandma, but she knew it was safe and not a place to make people happy. And that's what kind of all she had done.
+Once upon a time, there was a little girl named Lily. She loved to play outside and explore the world around her. One day, she found an old box in her yard. It was so pretty that it looked like a real flower.
+Lily opened the box and saw all of different things. "What are you doing?" she asked. Her mom told her about all the toys. So, Lily said she would use the magic wand and put them in the garden. Lily was happy to see her new toy inside.
+From then on, Lily loved going to the park every day. She always had lots of fun adventures together and playing with her friends. The end.
 ```
-**Analysis**: The model already produces fluent grammar and some coherent story structure after a very short training run - impressive for 1m28s. However, the output clearly shows hallucination/nonsense (weird facts, repeated/confused phrases). Two main causes are identified:
+**Analysis**: The model already produces fluent grammar and some coherent story structure after a very short training run - impressive for 1m32s. However, the output clearly shows hallucination/nonsense (weird facts, repeated/confused phrases). Two main causes are identified:
 
 - **Too little training time**: The short training duration limits the model's ability to learn complex patterns.
 - **Too-small dataset**: The limited dataset size restricts the model's exposure to diverse language patterns.
