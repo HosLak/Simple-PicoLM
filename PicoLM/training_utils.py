@@ -91,7 +91,7 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
     model = model.to(device)
 
     # Multi-GPU setup
-    
+    dist.init_process_group("nccl")
     # if num_gpus > 1:
     #     print(f"Using {num_gpus} GPUs with DataParallel")
     #     model = torch.nn.DataParallel(model)
