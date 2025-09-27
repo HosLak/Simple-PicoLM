@@ -88,35 +88,15 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
     model = PicoLM(config)
     num_gpus = torch.cuda.device_count()
     dist.init_process_group("nccl")
-    device = torch.device(f"cuda:{torch.distributed.get_rank()}" if num_gpus > 0 else "cuda")
+    local_rank = torch.distributed.get_rank()
+    device = torch.device(f"cuda:{local_rank}" if num_gpus > 0 else "cuda")
     model = model.to(device)
 
     # Multi-GPU setup
-    torch.cuda.set_device(torch.distributed.get_rank())
-    # if num_gpus > 1:
-    #     print(f"Using {num_gpus} GPUs with DataParallel")
-    #     model = torch.nn.DataParallel(model)
-    #     model_compiled = torch.compile(
-    #         model,
-    #         # dynamic=False,
-    #         # mode='reduce-overhead',
-    #         # fullgraph=False,
-    #         # disable=['conv_bn_fusion', 'triton_cudagraphs']
-    #     )
-        
-    #     print('multi-gpu + torch.compile()')
-    # else:
-    #     print("Using single GPU with torch.compile")
-    #     model_compiled = torch.compile(
-    #         model,
-    #         # dynamic=False,
-    #         # mode='reduce-overhead',
-    #         # fullgraph=False,
-    #         # disable=['conv_bn_fusion', 'triton_cudagraphs']
-    #     )
+    torch.cuda.set_device(local_rank)
     
     model_compiled = torch.compile(model)
-    model_compiled = DDP(model_compiled, device_ids=list(range(num_gpus)))
+    model_compiled = DDP(model_compiled, device_ids=[local_rank])
 
     total_params = sum(p.numel() for p in model.parameters())
     print(f"   Total parameters: {total_params:,}")
