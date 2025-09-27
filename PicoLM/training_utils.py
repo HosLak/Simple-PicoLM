@@ -92,7 +92,15 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
     if num_gpus > 1:
         print(f"Using {num_gpus} GPUs with DataParallel")
         model = torch.nn.DataParallel(model)
-        model_compiled = model
+        model_compiled = torch.compile(
+            model,
+            # dynamic=False,
+            # mode='reduce-overhead',
+            # fullgraph=False,
+            # disable=['conv_bn_fusion', 'triton_cudagraphs']
+        )
+        
+        print('multi-gpu + torch.compile()')
     else:
         print("Using single GPU with torch.compile")
         model_compiled = torch.compile(
