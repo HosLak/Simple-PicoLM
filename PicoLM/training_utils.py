@@ -22,13 +22,15 @@ def setup_ddp():
         world_size = int(os.environ['WORLD_SIZE'])
         local_rank = int(os.environ['LOCAL_RANK'])
     else:
-        # For single-node multi-GPU setup
+        # For single-node multi-GPU setup, set environment variables
         rank = 0
         world_size = torch.cuda.device_count()
         local_rank = 0
         os.environ['RANK'] = '0'
         os.environ['WORLD_SIZE'] = str(world_size)
         os.environ['LOCAL_RANK'] = '0'
+        os.environ['MASTER_ADDR'] = 'localhost'
+        os.environ['MASTER_PORT'] = '12355'
     
     # Initialize the process group
     if not dist.is_initialized():
@@ -63,7 +65,7 @@ def evaluate_model(model: nn.Module, val_loader: DataLoader, config: ModelConfig
             x, y = x.to(device), y.to(device)
 
             with autocast(enabled=config.use_amp):
-                # DataParallel
+                # DDP
                 if hasattr(model, 'module'):
                     logits = model.module(x)
                 else:
@@ -187,7 +189,10 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
     start_time = time.time()
     best_val_loss = float('inf')
 
-    pbar = tqdm(total=config.max_steps, desc="Training")
+    if rank == 0:
+        pbar = tqdm(total=config.max_steps, desc="Training")
+    else:
+        pbar = None
 
     while step < config.max_steps:
         for batch_idx, (x, y) in enumerate(train_loader):
@@ -238,22 +243,21 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
                     for scheduler in schedulers:
                         scheduler.step()
 
-            # Logging
-            if step % 100 == 0:
+            # Logging (only on rank 0)
+            if step % 100 == 0 and rank == 0:
                 with torch.no_grad():
                     predictions = logits.argmax(dim=-1)
                     accuracy = (predictions == y).float().mean().item()
                     current_loss = loss.item() * config.gradient_accumulation_steps
                     perplexity = math.exp(min(current_loss, 20))
 
-                if rank == 0:
-                    pbar.set_postfix({
-                        'loss': f'{current_loss:.4f}',
-                        'acc': f'{accuracy:.3f}',
-                        'ppl': f'{perplexity:.1f}',
-                        'muon_lr': f'{optimizers[0].param_groups[0]["lr"]:.2e}',
-                        'adamw_lr': f'{optimizers[1].param_groups[0]["lr"]:.2e}'
-                    })
+                pbar.set_postfix({
+                    'loss': f'{current_loss:.4f}',
+                    'acc': f'{accuracy:.3f}',
+                    'ppl': f'{perplexity:.1f}',
+                    'muon_lr': f'{optimizers[0].param_groups[0]["lr"]:.2e}',
+                    'adamw_lr': f'{optimizers[1].param_groups[0]["lr"]:.2e}'
+                })
 
             # Evaluation
             if step % config.eval_every == 0 and step > 0:
@@ -273,10 +277,11 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
                     best_val_loss = eval_metrics['val_loss']
 
             step += 1
-            if step % 50 == 0:
+            if step % 50 == 0 and pbar is not None:
                 pbar.update(50)
 
-    pbar.close()
+    if pbar is not None:
+        pbar.close()
 
     training_time = time.time() - start_time
     if rank == 0:
@@ -294,10 +299,11 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
               f"Val Acc: {final_eval['val_accuracy']:.4f}, "
               f"Val PPL: {final_eval['val_perplexity']:.2f}")
 
-    # Print stored losses
-    if rank == 0:
+        # Print stored losses
         print("\n Train Losses:", [f"{x:.4f}" for x in train_losses])
         print(" Validation Losses:", [f"{x:.4f}" for x in val_losses])
 
+    # Cleanup DDP
     cleanup_ddp()
+
     return model, final_eval
