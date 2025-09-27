@@ -87,7 +87,7 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
     set_seed(1337)
     model = PicoLM(config)
     num_gpus = torch.cuda.device_count()
-    device = torch.device(f"cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device(f"cuda:{torch.distributed.get_rank()}" if num_gpus > 0 else "cuda")
     model = model.to(device)
 
     # Multi-GPU setup
