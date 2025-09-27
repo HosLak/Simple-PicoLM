@@ -27,7 +27,11 @@ def evaluate_model(model: nn.Module, val_loader: DataLoader, config: ModelConfig
             x, y = x.to(device), y.to(device)
 
             with autocast(enabled=config.use_amp):
-                logits = model(x)
+                # DataParallel
+                if hasattr(model, 'module'):
+                    logits = model.module(x)
+                else:
+                    logits = model(x)
                 loss = F.cross_entropy(logits.view(-1, config.vocab_size), y.view(-1))
 
             total_loss += loss.item() * y.numel()
@@ -67,7 +71,10 @@ def setup_muon_optimizer(model: nn.Module, config: ModelConfig):
 
 def save_model(model, filepath="PicoLMModel.pt"):
     """Save only model weights (for inference)"""
-    torch.save(model.state_dict(), filepath)
+    if hasattr(model, 'module'):
+        torch.save(model.module.state_dict(), filepath)
+    else:
+        torch.save(model.state_dict(), filepath)
     print(f" Model weights saved to {filepath}")
 
 def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataLoader):
@@ -80,7 +87,21 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = model.to(device)
 
-    model_compiled  = torch.compile(model) 
+    # Multi-GPU setup
+    num_gpus = torch.cuda.device_count()
+    if num_gpus > 1:
+        print(f"Using {num_gpus} GPUs with DataParallel")
+        model = torch.nn.DataParallel(model)
+        model_compiled = model
+    else:
+        print("Using single GPU with torch.compile")
+        model_compiled = torch.compile(
+            model,
+            # dynamic=False,
+            # mode='reduce-overhead',
+            # fullgraph=False,
+            # disable=['conv_bn_fusion', 'triton_cudagraphs']
+        )
 
     total_params = sum(p.numel() for p in model.parameters())
     print(f"   Total parameters: {total_params:,}")
@@ -146,12 +167,20 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
             # Forward pass with gradient accumulation
             if config.use_amp:
                 with autocast():
-                    logits = model_compiled(x)
+                    if hasattr(model_compiled, 'module'):
+                        logits = model_compiled.module(x)
+                    else:
+                        logits = model_compiled(x)
+                        
                     loss = F.cross_entropy(logits.view(-1, config.vocab_size), y.view(-1))
                     loss = loss / config.gradient_accumulation_steps
                 scaler.scale(loss).backward()
             else:
-                logits = model_compiled(x)
+                if hasattr(model_compiled, 'module'):
+                    logits = model_compiled.module(x)
+                else:
+                    logits = model_compiled(x)
+                    
                 loss = F.cross_entropy(logits.view(-1, config.vocab_size), y.view(-1))
                 loss = loss / config.gradient_accumulation_steps
                 loss.backward()
