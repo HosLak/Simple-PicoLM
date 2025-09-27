@@ -84,54 +84,61 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
     """Train the model with Muon optimizer"""
     print(f"\n Training Small model with Muon optimizer")
 
-    # Initialize model
-    set_seed(1337)
-    model = PicoLM(config)
     num_gpus = torch.cuda.device_count()
 
     if num_gpus > 1:
-        print(f"Using {num_gpus} GPUs for DDP.")
         dist.init_process_group(backend="nccl")
         local_rank = dist.get_rank()
+        world_size = dist.get_world_size()
+        torch.cuda.set_device(local_rank)
+        device = torch.device(f"cuda:{local_rank}")
+    else:
+        local_rank = 0
+        world_size = 1
+        device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+
+    if local_rank == 0:
+        print(f"Using {num_gpus} GPUs for DDP." if num_gpus > 1 else "Using single GPU.")
+
+    set_seed(1337 + dist.get_rank())
+    model = PicoLM(config).to(device)
+
+    if num_gpus > 1:
+        model = DDP(model, device_ids=[local_rank], output_device=local_rank)
+    
+    # Then compile
+    model_compiled = torch.compile(model)
+    
+    # Setup distributed data loaders
+    if num_gpus > 1:
         train_sampler = DistributedSampler(
-            train_loader.dataset, 
-            num_replicas=dist.get_world_size(),
-            rank=local_rank
+            train_loader.dataset,
+            num_replicas=world_size,
+            rank=local_rank,
+            shuffle=True
         )
         val_sampler = DistributedSampler(
             val_loader.dataset,
-            num_replicas=dist.get_world_size(), 
-            rank=local_rank
+            num_replicas=world_size,
+            rank=local_rank,
+            shuffle=False
         )
         
         train_loader = DataLoader(
             train_loader.dataset,
-            batch_size=config.batch_size,
+            batch_size=config.batch_size // world_size,  # Split batch size
             sampler=train_sampler,
             num_workers=4,
-            pin_memory=True
+            pin_memory=True,
+            drop_last=True
         )
         val_loader = DataLoader(
             val_loader.dataset,
-            batch_size=config.batch_size,
+            batch_size=config.batch_size // world_size,
             sampler=val_sampler,
             num_workers=4,
             pin_memory=True
         )
-        
-        torch.cuda.set_device(local_rank)
-        device = torch.device(f"cuda:{local_rank}")
-    else:
-        print("Using single GPU or CPU.")
-        local_rank = 0 # Default for single GPU or CPU
-        device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-
-    model = model.to(device)
-
-    if num_gpus > 1:
-        model = DDP(model, device_ids=[local_rank])
-        
-    model_compiled = torch.compile(model)
 
     total_params = sum(p.numel() for p in model.parameters())
     print(f"   Total parameters: {total_params:,}")
