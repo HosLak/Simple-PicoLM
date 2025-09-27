@@ -87,11 +87,12 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
     set_seed(1337)
     model = PicoLM(config)
     num_gpus = torch.cuda.device_count()
+    dist.init_process_group("nccl")
     device = torch.device(f"cuda:{torch.distributed.get_rank()}" if num_gpus > 0 else "cuda")
     model = model.to(device)
 
     # Multi-GPU setup
-    dist.init_process_group("nccl")
+    torch.cuda.set_device(torch.distributed.get_rank())
     # if num_gpus > 1:
     #     print(f"Using {num_gpus} GPUs with DataParallel")
     #     model = torch.nn.DataParallel(model)
