@@ -127,9 +127,11 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
     model = PicoLM(config)
     device = torch.device(f'cuda:{local_rank}')
     model = model.to(device)
+    print('i am here 1', local_rank)
 
     # Wrap model with DDP
     model = DDP(model, device_ids=[local_rank], output_device=local_rank)
+    print('i am here 2', local_rank)
     
     # Compile the model
     model_compiled = torch.compile(model)
