@@ -4,9 +4,7 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from torch.cuda.amp import autocast, GradScaler
 from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.utils.data.distributed import DistributedSampler
 import torch.distributed as dist
-import os
 import math
 import time
 from tqdm import tqdm
@@ -14,40 +12,6 @@ from tqdm import tqdm
 from .config import ModelConfig
 from .model import PicoLM, Muon
 from .data_utils import set_seed
-
-def setup_ddp():
-    """Initialize distributed training"""
-    if 'RANK' in os.environ and 'WORLD_SIZE' in os.environ:
-        rank = int(os.environ['RANK'])
-        world_size = int(os.environ['WORLD_SIZE'])
-        local_rank = int(os.environ['LOCAL_RANK'])
-    else:
-        # For single-node multi-GPU setup, set environment variables
-        rank = 0
-        world_size = torch.cuda.device_count()
-        local_rank = 0
-        os.environ['RANK'] = '0'
-        os.environ['WORLD_SIZE'] = str(world_size)
-        os.environ['LOCAL_RANK'] = '0'
-        os.environ['MASTER_ADDR'] = 'localhost'
-        os.environ['MASTER_PORT'] = '12355'
-    
-    # Initialize the process group
-    if not dist.is_initialized():
-        dist.init_process_group(
-            backend='nccl',
-            init_method='env://',
-            world_size=world_size,
-            rank=rank
-        )
-    
-    torch.cuda.set_device(local_rank)
-    return rank, world_size, local_rank
-
-def cleanup_ddp():
-    """Clean up distributed training"""
-    if dist.is_initialized():
-        dist.destroy_process_group()
 
 def evaluate_model(model: nn.Module, val_loader: DataLoader, config: ModelConfig):
     """Evaluate model performance"""
@@ -65,7 +29,7 @@ def evaluate_model(model: nn.Module, val_loader: DataLoader, config: ModelConfig
             x, y = x.to(device), y.to(device)
 
             with autocast(enabled=config.use_amp):
-                # DDP
+                # DataParallel
                 if hasattr(model, 'module'):
                     logits = model.module(x)
                 else:
@@ -116,29 +80,48 @@ def save_model(model, filepath="PicoLMModel.pt"):
     print(f" Model weights saved to {filepath}")
 
 def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataLoader):
-    """Train the model with Muon optimizer using DDP"""
-    print(f"\n Training Small model with Muon optimizer using DDsdfsdfP")
+    """Train the model with Muon optimizer"""
+    print(f"\n Training Small model with Muon optimizer")
 
-    # Setup DDP
-    rank, world_size, local_rank = setup_ddp()
-    
     # Initialize model
     set_seed(1337)
     model = PicoLM(config)
-    device = torch.device(f'cuda:{local_rank}')
+    num_gpus = torch.cuda.device_count()
+    local_rank = torch.distributed.get_rank()
+    print(f"Local rank: {local_rank}")
+    device = torch.device(f"cuda:{local_rank}" if num_gpus > 0 else "cpu")
     model = model.to(device)
-    print('i am here 1', local_rank)
 
-    # Wrap model with DDP
-    model = DDP(model, device_ids=[local_rank], output_device=local_rank)
-    print('i am here 2', local_rank)
+    # Multi-GPU setup
     
-    # Compile the model
+    dist.init_process_group(backend="nccl")
+    # if num_gpus > 1:
+    #     print(f"Using {num_gpus} GPUs with DataParallel")
+    #     model = torch.nn.DataParallel(model)
+    #     model_compiled = torch.compile(
+    #         model,
+    #         # dynamic=False,
+    #         # mode='reduce-overhead',
+    #         # fullgraph=False,
+    #         # disable=['conv_bn_fusion', 'triton_cudagraphs']
+    #     )
+        
+    #     print('multi-gpu + torch.compile()')
+    # else:
+    #     print("Using single GPU with torch.compile")
+    #     model_compiled = torch.compile(
+    #         model,
+    #         # dynamic=False,
+    #         # mode='reduce-overhead',
+    #         # fullgraph=False,
+    #         # disable=['conv_bn_fusion', 'triton_cudagraphs']
+    #     )
+    
     model_compiled = torch.compile(model)
+    model_compiled = DDP(model_compiled, device_ids=list(range(num_gpus)))
 
     total_params = sum(p.numel() for p in model.parameters())
-    if rank == 0:  # Only print on rank 0
-        print(f"   Total parameters: {total_params:,}")
+    print(f"   Total parameters: {total_params:,}")
 
     # Setup optimizers
     optimizers = setup_muon_optimizer(model, config)
@@ -174,16 +157,14 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
     model_compiled.eval()
     initial_eval = evaluate_model(model_compiled, val_loader, config)
     val_losses.append(initial_eval['val_loss'])
-    if rank == 0:
-        print(f"\nInitial Val Loss: {initial_eval['val_loss']:.4f}, "
-              f"Val Acc: {initial_eval['val_accuracy']:.4f}, "
-              f"Val PPL: {initial_eval['val_perplexity']:.2f}")
+    print(f"\nInitial Val Loss: {initial_eval['val_loss']:.4f}, "
+          f"Val Acc: {initial_eval['val_accuracy']:.4f}, "
+          f"Val PPL: {initial_eval['val_perplexity']:.2f}")
 
     # Compute initial train loss using evaluate_model
     initial_train_eval = evaluate_model(model_compiled, train_loader, config)
     train_losses.append(initial_train_eval['val_loss'])
-    if rank == 0:
-        print(f"Initial Train Loss: {initial_train_eval['val_loss']:.4f}")
+    print(f"Initial Train Loss: {initial_train_eval['val_loss']:.4f}")
 
     # Training loop
     model_compiled.train()
@@ -191,10 +172,7 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
     start_time = time.time()
     best_val_loss = float('inf')
 
-    if rank == 0:
-        pbar = tqdm(total=config.max_steps, desc="Training")
-    else:
-        pbar = None
+    pbar = tqdm(total=config.max_steps, desc="Training")
 
     while step < config.max_steps:
         for batch_idx, (x, y) in enumerate(train_loader):
@@ -245,8 +223,8 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
                     for scheduler in schedulers:
                         scheduler.step()
 
-            # Logging (only on rank 0)
-            if step % 100 == 0 and rank == 0:
+            # Logging
+            if step % 100 == 0:
                 with torch.no_grad():
                     predictions = logits.argmax(dim=-1)
                     accuracy = (predictions == y).float().mean().item()
@@ -268,26 +246,23 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
                 val_losses.append(eval_metrics['val_loss'])
                 train_eval_metrics = evaluate_model(model_compiled, train_loader, config)
                 train_losses.append(train_eval_metrics['val_loss'])
-                if rank == 0:
-                    print(f"\nStep {step}: Val Loss: {eval_metrics['val_loss']:.4f}, "
-                          f"Train Loss: {train_eval_metrics['val_loss']:.4f}, "
-                          f"Val Acc: {eval_metrics['val_accuracy']:.4f}, "
-                          f"Val PPL: {eval_metrics['val_perplexity']:.2f}")
+                print(f"\nStep {step}: Val Loss: {eval_metrics['val_loss']:.4f}, "
+                      f"Train Loss: {train_eval_metrics['val_loss']:.4f}, "
+                      f"Val Acc: {eval_metrics['val_accuracy']:.4f}, "
+                      f"Val PPL: {eval_metrics['val_perplexity']:.2f}")
                 model_compiled.train()
 
                 if eval_metrics['val_loss'] < best_val_loss:
                     best_val_loss = eval_metrics['val_loss']
 
             step += 1
-            if step % 50 == 0 and pbar is not None:
+            if step % 50 == 0:
                 pbar.update(50)
 
-    if pbar is not None:
-        pbar.close()
+    pbar.close()
 
     training_time = time.time() - start_time
-    if rank == 0:
-        print(f"   Training completed in {training_time:.1f} seconds")
+    print(f"   Training completed in {training_time:.1f} seconds")
 
     # Final evaluation
     model_compiled.eval()
@@ -295,17 +270,13 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
     final_train_eval = evaluate_model(model_compiled, train_loader, config)
     val_losses.append(final_eval['val_loss'])
     train_losses.append(final_train_eval['val_loss'])
-    if rank == 0:
-        print(f"   Final - Val Loss: {final_eval['val_loss']:.4f}, "
-              f"Train Loss: {final_train_eval['val_loss']:.4f}, "
-              f"Val Acc: {final_eval['val_accuracy']:.4f}, "
-              f"Val PPL: {final_eval['val_perplexity']:.2f}")
+    print(f"   Final - Val Loss: {final_eval['val_loss']:.4f}, "
+          f"Train Loss: {final_train_eval['val_loss']:.4f}, "
+          f"Val Acc: {final_eval['val_accuracy']:.4f}, "
+          f"Val PPL: {final_eval['val_perplexity']:.2f}")
 
-        # Print stored losses
-        print("\n Train Losses:", [f"{x:.4f}" for x in train_losses])
-        print(" Validation Losses:", [f"{x:.4f}" for x in val_losses])
-
-    # Cleanup DDP
-    cleanup_ddp()
+    # Print stored losses
+    print("\n Train Losses:", [f"{x:.4f}" for x in train_losses])
+    print(" Validation Losses:", [f"{x:.4f}" for x in val_losses])
 
     return model, final_eval
