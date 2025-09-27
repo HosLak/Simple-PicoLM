@@ -85,7 +85,7 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
     # Initialize model
     set_seed(1337)
     model = PicoLM(config)
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = model.to(device)
 
     # Multi-GPU setup
@@ -112,7 +112,7 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
     #         # disable=['conv_bn_fusion', 'triton_cudagraphs']
     #     )
     
-    model_compiled = torch.compile(model,)
+    model_compiled = torch.compile(model)
     model_compiled = DDP(model_compiled, device_ids=list(range(num_gpus)))
 
     total_params = sum(p.numel() for p in model.parameters())
