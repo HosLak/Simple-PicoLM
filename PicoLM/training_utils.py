@@ -91,9 +91,10 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
     # Learning rate schedule
     schedulers = []
     for optimizer in optimizers:
-        warmup_steps = int(config.max_steps * 0.06)
-        milestone1 = int(config.max_steps * 0.8)
-        milestone2 = int(config.max_steps * 0.9)
+        effective_max_steps = config.max_steps // config.gradient_accumulation_steps
+        warmup_steps = int(effective_max_steps * 0.06)
+        milestone1 = int(effective_max_steps * 0.8)
+        milestone2 = int(effective_max_steps * 0.9)
         
         def lr_lambda(step):
             if step < warmup_steps:
