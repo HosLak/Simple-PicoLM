@@ -16,13 +16,11 @@ However, simple-PicoLM also performs well in general tasks like everyday chats o
 ## Features
 - **Efficient Transformer Architecture**: Optimized for fast training.
 - **Gradient Stabilization**: Prevents exploding gradients.
-- **Configurable Context Length**: Supports long-form reasoning.
 - **Multi-GPU & Distributed Training**: Scale training across multiple devices.
 - **Automatic Mixed Precision (AMP)**: Memory-efficient training.
 - **Built-in Evaluation Metrics**: Loss, perplexity, accuracy.
 - **Modular Code Structure**: Easy experimentation and extension.
 - **Optimizer Flexibility**: Supports AdamW and Muon.
-- **Lightweight Inference**: Can run efficiently on Colab T4 GPU.
 - **Open-Source**: Base code available on GitHub, with MIT license.
 
 ## Architecture
