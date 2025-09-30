@@ -13,7 +13,10 @@ from .data_utils import set_seed, load_cached_data, TextTokenDataset
 from .training_utils import train_model, save_model
 
 def main():
-    dist.init_process_group(backend="nccl")
+    try:
+        dist.init_process_group(backend="nccl")
+    except:
+        pass
     ddp = int(os.environ.get('RANK', -1)) != -1
     rank = int(os.environ.get('RANK', 0))
     local_rank = int(os.environ.get('LOCAL_RANK', 0))
