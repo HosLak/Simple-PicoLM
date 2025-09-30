@@ -1,12 +1,15 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 from torch.cuda.amp import autocast, GradScaler
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.utils.data.distributed import DistributedSampler
+import os
 import math
 import time
+import sys
 from tqdm import tqdm
 
 from .config import ModelConfig
@@ -73,46 +76,53 @@ def setup_muon_optimizer(model: nn.Module, config: ModelConfig):
 
 def save_model(model, filepath="PicoLMModel.pt"):
     """Save only model weights (for inference)"""
-    if hasattr(model, 'module'):
-        torch.save(model.module.state_dict(), filepath)
-    else:
-        torch.save(model.state_dict(), filepath)
+    torch.save(model.state_dict(), filepath)
     print(f" Model weights saved to {filepath}")
 
-def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataLoader):
+def train_model(config: ModelConfig, train_loader: Dataset, val_loader: Dataset, is_master: bool = True):
     """Train the model with Muon optimizer"""
-    print(f"\n Training Small model with Muon optimizer")
+    if is_master:
+        print(f"\n Training Small model with Muon optimizer")
 
     # Initialize model
     set_seed(1337)
     model = PicoLM(config)
     
     num_gpus = torch.cuda.device_count()
+    ddp = int(os.environ.get('RANK', -1)) != -1
 
-    if num_gpus > 1:
-        print(f"Using {num_gpus} GPUs for DDP.")
-        dist.init_process_group(backend="nccl")
-        local_rank = dist.get_rank()
-        torch.cuda.set_device(local_rank)
-        device = torch.device(f"cuda:{local_rank}")
+    if ddp:
+        if is_master:
+            print(f"Using {num_gpus} GPUs for DDP.")
+        if not dist.is_initialized():
+            dist.init_process_group(backend="nccl")
+        ddp_rank = int(os.environ['RANK'])
+        ddp_local_rank = int(os.environ['LOCAL_RANK'])
+        device = f'cuda:{ddp_local_rank}'
+        torch.cuda.set_device(device)
     else:
-        print("Using single GPU or CPU.")
-        local_rank = 0 # Default for single GPU or CPU
+        if is_master:
+            print("Using single GPU or CPU.")
+        ddp_rank = 0
+        ddp_local_rank = 0
+        ddp_world_size = 1
         device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
     model = model.to(device)
-
-    model_compiled = torch.compile(model)
-
-    if num_gpus > 1:
-        model_compiled = DDP(model_compiled, device_ids=[local_rank])
-
+    if ddp:
+        model = DDP(model, device_ids=[ddp_local_rank])
+        
+    model = torch.compile(model)
+    raw_model = model.module if ddp else model
     
-    total_params = sum(p.numel() for p in model.parameters())
-    print(f"   Total parameters: {total_params:,}")
+    if is_master:
+        total_params = sum(p.numel() for p in model.parameters())
+        print(f"   Total parameters: {total_params:,}")
+        total_batch_size = config.batch_size * config.gradient_accumulation_steps * config.max_seq_len * num_gpus
+        print(f"total batch size: {total_batch_size}")
 
     # Setup optimizers
-    optimizers = setup_muon_optimizer(model, config)
+    optimizers = setup_muon_optimizer(raw_model, config)
 
     # Learning rate schedule
     schedulers = []
@@ -142,20 +152,20 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
     val_losses = []
 
     # Compute initial validation and train loss
-    model_compiled.eval()
-    initial_eval = evaluate_model(model_compiled, val_loader, config)
+    model.eval()
+    initial_eval = evaluate_model(model, val_loader, config)
     val_losses.append(initial_eval['val_loss'])
     print(f"\nInitial Val Loss: {initial_eval['val_loss']:.4f}, "
           f"Val Acc: {initial_eval['val_accuracy']:.4f}, "
           f"Val PPL: {initial_eval['val_perplexity']:.2f}")
 
     # Compute initial train loss using evaluate_model
-    initial_train_eval = evaluate_model(model_compiled, train_loader, config)
+    initial_train_eval = evaluate_model(model, train_loader, config)
     train_losses.append(initial_train_eval['val_loss'])
     print(f"Initial Train Loss: {initial_train_eval['val_loss']:.4f}")
 
     # Training loop
-    model_compiled.train()
+    model.train()
     step = 0
     start_time = time.time()
     best_val_loss = float('inf')
@@ -168,26 +178,29 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
                 break
         
             x, y = x.to(device), y.to(device)
-
-            # Forward pass with gradient accumulation
+            if ddp:
+                model.require_backward_grad_sync = ((step + 1) % config.gradient_accumulation_steps == 0)
             if config.use_amp:
                 with autocast():
-                    if hasattr(model_compiled, 'module'):
-                        logits = model_compiled.module(x)
-                    else:
-                        logits = model_compiled(x)
-                        
+                    logits = model(x)
                     loss = F.cross_entropy(logits.view(-1, config.vocab_size), y.view(-1))
                     loss = loss / config.gradient_accumulation_steps
+                loss_detached = loss.detach().clone()
+                if ddp:
+                    with torch.no_grad():
+                        dist.all_reduce(loss_detached, op=dist.ReduceOp.AVG)
+                        
                 scaler.scale(loss).backward()
             else:
-                if hasattr(model_compiled, 'module'):
-                    logits = model_compiled.module(x)
-                else:
-                    logits = model_compiled(x)
-                    
+                logits = model(x)
                 loss = F.cross_entropy(logits.view(-1, config.vocab_size), y.view(-1))
                 loss = loss / config.gradient_accumulation_steps
+                
+                loss_detached = loss.detach().clone()
+                if ddp:
+                    with torch.no_grad():
+                        dist.all_reduce(loss_detached, op=dist.ReduceOp.AVG)
+
                 loss.backward()
 
             # Optimizer step after accumulation
@@ -195,7 +208,7 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
                 if config.use_amp:
                     for optimizer in optimizers:
                         scaler.unscale_(optimizer)
-                    grad_norm = torch.nn.utils.clip_grad_norm_(model_compiled.parameters(), config.grad_clip)
+                    grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), config.grad_clip)
 
                     for optimizer in optimizers:
                         scaler.step(optimizer)
@@ -204,67 +217,87 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
                         scheduler.step()
                     scaler.update()
                 else:
-                    grad_norm = torch.nn.utils.clip_grad_norm_(model_compiled.parameters(), config.grad_clip)
+                    grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), config.grad_clip)
                     for optimizer in optimizers:
                         optimizer.step()
                         optimizer.zero_grad()
                     for scheduler in schedulers:
                         scheduler.step()
+            
+            if is_master:
+                # Logging
+                if step % 100 == 0:
+                    with torch.no_grad():
+                        predictions = logits.argmax(dim=-1)
+                        accuracy = (predictions == y).float().mean()
+                        if ddp:
+                            dist.all_reduce(accuracy, op=dist.ReduceOp.SUM)
+                            accuracy /= dist.get_world_size()
+                        current_loss = loss_detached.clone()
+                        if ddp:
+                            dist.all_reduce(current_loss, op=dist.ReduceOp.AVG)
+                        current_loss = current_loss.item() * config.gradient_accumulation_steps
+                        perplexity = math.exp(min(current_loss, 20))
 
-            # Logging
-            if step % 100 == 0:
-                with torch.no_grad():
-                    predictions = logits.argmax(dim=-1)
-                    accuracy = (predictions == y).float().mean().item()
-                    current_loss = loss.item() * config.gradient_accumulation_steps
-                    perplexity = math.exp(min(current_loss, 20))
+                    pbar.set_postfix({
+                        'loss': f'{current_loss:.4f}',
+                        'acc': f'{accuracy:.3f}',
+                        'ppl': f'{perplexity:.1f}',
+                        'muon_lr': f'{optimizers[0].param_groups[0]["lr"]:.2e}',
+                        'adamw_lr': f'{optimizers[1].param_groups[0]["lr"]:.2e}'
+                    })
 
-                pbar.set_postfix({
-                    'loss': f'{current_loss:.4f}',
-                    'acc': f'{accuracy:.3f}',
-                    'ppl': f'{perplexity:.1f}',
-                    'muon_lr': f'{optimizers[0].param_groups[0]["lr"]:.2e}',
-                    'adamw_lr': f'{optimizers[1].param_groups[0]["lr"]:.2e}'
-                })
+                # Evaluation
+                if step % config.eval_every == 0 and step > 0:
+                    model.eval()
+                    eval_metrics = evaluate_model(model, val_loader, config)
+                    val_losses.append(eval_metrics['val_loss'])
+                    train_eval_metrics = evaluate_model(model, train_loader, config)
+                    train_losses.append(train_eval_metrics['val_loss'])
+                    print(f"\nStep {step}: Val Loss: {eval_metrics['val_loss']:.4f}, "
+                        f"Train Loss: {train_eval_metrics['val_loss']:.4f}, "
+                        f"Val Acc: {eval_metrics['val_accuracy']:.4f}, "
+                        f"Val PPL: {eval_metrics['val_perplexity']:.2f}")
+                    model.train()
 
-            # Evaluation
-            if step % config.eval_every == 0 and step > 0:
-                model_compiled.eval()
-                eval_metrics = evaluate_model(model_compiled, val_loader, config)
-                val_losses.append(eval_metrics['val_loss'])
-                train_eval_metrics = evaluate_model(model_compiled, train_loader, config)
-                train_losses.append(train_eval_metrics['val_loss'])
-                print(f"\nStep {step}: Val Loss: {eval_metrics['val_loss']:.4f}, "
-                      f"Train Loss: {train_eval_metrics['val_loss']:.4f}, "
-                      f"Val Acc: {eval_metrics['val_accuracy']:.4f}, "
-                      f"Val PPL: {eval_metrics['val_perplexity']:.2f}")
-                model_compiled.train()
-
-                if eval_metrics['val_loss'] < best_val_loss:
-                    best_val_loss = eval_metrics['val_loss']
+                    if eval_metrics['val_loss'] < best_val_loss:
+                        best_val_loss = eval_metrics['val_loss']
 
             step += 1
-            if step % 50 == 0:
+            if step % 50 == 0 and is_master:
                 pbar.update(50)
-
-    pbar.close()
-
-    training_time = time.time() - start_time
-    print(f"   Training completed in {training_time:.1f} seconds")
+    
+    if ddp:
+        dist.barrier()
+        if not is_master:
+            try:
+                dist.destroy_process_group()
+            except Exception:
+                pass
+            return
 
     # Final evaluation
-    model_compiled.eval()
-    final_eval = evaluate_model(model_compiled, val_loader, config)
-    final_train_eval = evaluate_model(model_compiled, train_loader, config)
-    val_losses.append(final_eval['val_loss'])
-    train_losses.append(final_train_eval['val_loss'])
-    print(f"   Final - Val Loss: {final_eval['val_loss']:.4f}, "
-          f"Train Loss: {final_train_eval['val_loss']:.4f}, "
-          f"Val Acc: {final_eval['val_accuracy']:.4f}, "
-          f"Val PPL: {final_eval['val_perplexity']:.2f}")
+    if is_master:
+        pbar.close()
+        training_time = time.time() - start_time
+        print(f"   Training completed in {training_time:.1f} seconds")
+        model.eval()
+        final_eval = evaluate_model(model, val_loader, config)
+        final_train_eval = evaluate_model(model, train_loader, config)
+        val_losses.append(final_eval['val_loss'])
+        train_losses.append(final_train_eval['val_loss'])
+        print(f"   Final - Val Loss: {final_eval['val_loss']:.4f}, "
+            f"Train Loss: {final_train_eval['val_loss']:.4f}, "
+            f"Val Acc: {final_eval['val_accuracy']:.4f}, "
+            f"Val PPL: {final_eval['val_perplexity']:.2f}")
 
-    # Print stored losses
-    print("\n Train Losses:", [f"{x:.4f}" for x in train_losses])
-    print(" Validation Losses:", [f"{x:.4f}" for x in val_losses])
+        if ddp:
+            try:
+                dist.destroy_process_group()
+            except Exception:
+                pass
+        # Print stored losses
+        print("\n Train Losses:", [f"{x:.4f}" for x in train_losses])
+        print(" Validation Losses:", [f"{x:.4f}" for x in val_losses])
 
-    return model, final_eval
+        return raw_model, final_eval
