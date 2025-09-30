@@ -223,24 +223,19 @@ def train_model(config: ModelConfig, train_loader: Dataset, val_loader: Dataset,
             
             if step % 100 == 0:
                 with torch.no_grad():
-                    predictions = logits.argmax(dim=-1)
-                    accuracy_local = (predictions == y).float().mean().to(device)
+                    preds = logits.argmax(dim=-1)
+                    acc_local = (preds == y).float().mean().to(device)
+                    loss_local = loss_detached.clone().to(device)
 
                 if ddp:
-                    dist.reduce(accuracy_local, dst=0, op=dist.ReduceOp.SUM)
+                    dist.reduce(acc_local, dst=0, op=dist.ReduceOp.SUM)
+                    dist.reduce(loss_local, dst=0, op=dist.ReduceOp.SUM)
 
-                current_loss_local = loss_detached.clone().to(device)
-                if ddp:
-                    dist.reduce(current_loss_local, dst=0, op=dist.ReduceOp.SUM)
-                    
-                    
-                # Logging
                 if is_master:
-                    with torch.no_grad():
-                        world_size = dist.get_world_size() if ddp else 1
-                        accuracy = (accuracy_local / world_size).item()
-                        current_loss = (current_loss_local / world_size).item() * config.gradient_accumulation_steps
-                        perplexity = math.exp(min(current_loss, 20))
+                    world_size = dist.get_world_size() if ddp else 1
+                    accuracy = (acc_local / world_size).item()
+                    current_loss = (loss_local / world_size).item() * config.gradient_accumulation_steps
+                    perplexity = math.exp(min(current_loss, 20.0))
 
                     pbar.set_postfix({
                         'loss': f'{current_loss:.4f}',
@@ -249,7 +244,6 @@ def train_model(config: ModelConfig, train_loader: Dataset, val_loader: Dataset,
                         'muon_lr': f'{optimizers[0].param_groups[0]["lr"]:.2e}',
                         'adamw_lr': f'{optimizers[1].param_groups[0]["lr"]:.2e}'
                     })
-
                 # Evaluation
                 if step % config.eval_every == 0 and step > 0 and is_master:
                     model.eval()

@@ -108,9 +108,10 @@ def main():
     # Train model
     if is_master:
         start_time = time.time()
-    model, final_metrics = train_model(config, train_loader, valid_loader, is_master)
+    result = train_model(config, train_loader, valid_loader, is_master)
     
     if is_master:
+        model, final_metrics = result
         total_time = time.time() - start_time
         print(f"\n TRAINING COMPLETED!")
         save_model(model, "PicoLMModel.pt")
