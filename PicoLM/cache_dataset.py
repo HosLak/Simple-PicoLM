@@ -1,20 +1,10 @@
 from datasets import load_dataset
 from tqdm import tqdm
-import os
 import pickle
 
-from .config import ModelConfig
-
-
-def cache(config: ModelConfig):
-    os.makedirs(config.data_cache_dir, exist_ok=True)
+def cache(config):
     dataset_name = config.dataset_name.split('/')[-1]
     cache_prefix = f"{config.data_cache_dir}/tokenized_{dataset_name}_{config.max_tokens}"
-    existing_chunks = [f for f in os.listdir(config.data_cache_dir) if f.startswith(os.path.basename(cache_prefix))]
-    
-    if len(existing_chunks) > 0:
-        print(f"Chunks already exist in {config.data_cache_dir}")
-        return
     
     print(f"Processing new data (will cache for future use)")
 
@@ -65,6 +55,3 @@ def cache(config: ModelConfig):
         total_tokens += len(all_tokens)
 
     print(f"Finished caching {total_tokens:,} tokens in {chunk_id+1} chunks")
-
-config = ModelConfig()
-cache(config)
