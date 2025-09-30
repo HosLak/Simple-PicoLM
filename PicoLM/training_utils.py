@@ -96,16 +96,13 @@ def train_model(config: ModelConfig, train_loader: Dataset, val_loader: Dataset,
             print(f"Using {num_gpus} GPUs for DDP.")
         if not dist.is_initialized():
             dist.init_process_group(backend="nccl")
-        ddp_rank = int(os.environ['RANK'])
         ddp_local_rank = int(os.environ['LOCAL_RANK'])
         device = f'cuda:{ddp_local_rank}'
         torch.cuda.set_device(device)
     else:
         if is_master:
             print("Using single GPU or CPU.")
-        ddp_rank = 0
         ddp_local_rank = 0
-        ddp_world_size = 1
         device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
     model = model.to(device)
@@ -224,19 +221,25 @@ def train_model(config: ModelConfig, train_loader: Dataset, val_loader: Dataset,
                     for scheduler in schedulers:
                         scheduler.step()
             
-            if is_master:
+            if step % 100 == 0:
+                with torch.no_grad():
+                    predictions = logits.argmax(dim=-1)
+                    accuracy_local = (predictions == y).float().mean().to(device)
+
+                if ddp:
+                    dist.reduce(accuracy_local, dst=0, op=dist.ReduceOp.SUM)
+
+                current_loss_local = loss_detached.clone().to(device)
+                if ddp:
+                    dist.reduce(current_loss_local, dst=0, op=dist.ReduceOp.SUM)
+                    
+                    
                 # Logging
-                if step % 100 == 0:
+                if is_master:
                     with torch.no_grad():
-                        predictions = logits.argmax(dim=-1)
-                        accuracy = (predictions == y).float().mean()
-                        if ddp:
-                            dist.all_reduce(accuracy, op=dist.ReduceOp.SUM)
-                            accuracy /= dist.get_world_size()
-                        current_loss = loss_detached.clone()
-                        if ddp:
-                            dist.all_reduce(current_loss, op=dist.ReduceOp.AVG)
-                        current_loss = current_loss.item() * config.gradient_accumulation_steps
+                        world_size = dist.get_world_size() if ddp else 1
+                        accuracy = (accuracy_local / world_size).item()
+                        current_loss = (current_loss_local / world_size).item() * config.gradient_accumulation_steps
                         perplexity = math.exp(min(current_loss, 20))
 
                     pbar.set_postfix({

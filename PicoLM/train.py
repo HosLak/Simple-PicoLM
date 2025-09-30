@@ -56,7 +56,8 @@ def main():
     )
     if is_master:
         print(f"Dataset: {len(train_dataset)} train, {len(val_dataset)} val samples")
-    
+        print(f'DDP: {ddp}')
+        
     shuffle = True
     if ddp:
         train_sampler = DistributedSampler(
