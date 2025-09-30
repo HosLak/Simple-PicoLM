@@ -58,7 +58,11 @@ def main():
         dataset, [train_size, val_size], generator=torch.Generator().manual_seed(1337)
     )
     if is_master:
+        num_gpus = torch.cuda.device_count()
+        effective_batch_size = config.batch_size * config.gradient_accumulation_steps * config.max_seq_len * num_gpus
+        print(f'Effective Batch Size: {effective_batch_size}, and for each gpu -> {effective_batch_size//num_gpus}')
         print(f"Dataset: {len(train_dataset)} train, {len(val_dataset)} val samples")
+        print()
         print(f'DDP: {ddp}')
         
     shuffle = True
