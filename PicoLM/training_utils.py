@@ -103,6 +103,7 @@ def train_model(config: ModelConfig, train_loader: Dataset, val_loader: Dataset,
         ddp_local_rank = 0
         device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
+    device_type = "cuda" if device.startswith("cuda") else "cpu"
     model = model.to(device)
     if ddp:
         model = DDP(model, device_ids=[ddp_local_rank])
@@ -173,8 +174,10 @@ def train_model(config: ModelConfig, train_loader: Dataset, val_loader: Dataset,
                 break
         
             x, y = x.to(device), y.to(device)
+            is_accum_step = (step + 1) % config.gradient_accumulation_steps == 0
+            
             if ddp:
-                model.require_backward_grad_sync = ((step + 1) % config.gradient_accumulation_steps == 0)
+                model.require_backward_grad_sync = (is_accum_step)
             if config.use_amp:
                 with autocast():
                     logits = model(x)
@@ -218,6 +221,9 @@ def train_model(config: ModelConfig, train_loader: Dataset, val_loader: Dataset,
                         optimizer.zero_grad()
                     for scheduler in schedulers:
                         scheduler.step()
+                        
+            if device_type == "cuda" and is_accum_step:
+                torch.cuda.synchronize()
             
             if step % 100 == 0:
                 with torch.no_grad():
