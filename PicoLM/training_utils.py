@@ -9,6 +9,7 @@ import os
 import math
 import time
 from tqdm import tqdm
+from itertools import cycle
 
 from .config import ModelConfig
 from .model import PicoLM, Muon
@@ -168,105 +169,104 @@ def train_model(config: ModelConfig, train_loader: Dataset, val_loader: Dataset,
 
     pbar = tqdm(total=config.max_steps, desc="Training")
 
-    while step < config.max_steps:
-        for batch_idx, (x, y) in enumerate(train_loader):
-            if step >= config.max_steps:
-                break
+    data_iter = iter(cycle(train_loader))
+    for step in range(config.max_steps):
+        x, y = next(data_iter)
+        x, y = x.to(device), y.to(device)
         
-            x, y = x.to(device), y.to(device)
-            is_accum_step = (step + 1) % config.gradient_accumulation_steps == 0
-            
-            if ddp:
-                model.require_backward_grad_sync = (is_accum_step)
-            if config.use_amp:
-                with autocast():
-                    logits = model(x)
-                    loss = F.cross_entropy(logits.view(-1, config.vocab_size), y.view(-1))
-                    loss = loss / config.gradient_accumulation_steps
-                loss_detached = loss.detach().clone()
-                if ddp:
-                    with torch.no_grad():
-                        dist.all_reduce(loss_detached, op=dist.ReduceOp.AVG)
-                        
-                scaler.scale(loss).backward()
-            else:
+        is_accum_step = (step + 1) % config.gradient_accumulation_steps == 0
+        
+        if ddp:
+            model.require_backward_grad_sync = (is_accum_step)
+        if config.use_amp:
+            with autocast():
                 logits = model(x)
                 loss = F.cross_entropy(logits.view(-1, config.vocab_size), y.view(-1))
                 loss = loss / config.gradient_accumulation_steps
-                
-                loss_detached = loss.detach().clone()
-                if ddp:
-                    with torch.no_grad():
-                        dist.all_reduce(loss_detached, op=dist.ReduceOp.AVG)
-
-                loss.backward()
-
-            # Optimizer step after accumulation
-            if (step + 1) % config.gradient_accumulation_steps == 0:
-                if config.use_amp:
-                    for optimizer in optimizers:
-                        scaler.unscale_(optimizer)
-                    grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), config.grad_clip)
-
-                    for optimizer in optimizers:
-                        scaler.step(optimizer)
-                        optimizer.zero_grad()
-                    for scheduler in schedulers:
-                        scheduler.step()
-                    scaler.update()
-                else:
-                    grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), config.grad_clip)
-                    for optimizer in optimizers:
-                        optimizer.step()
-                        optimizer.zero_grad()
-                    for scheduler in schedulers:
-                        scheduler.step()
-                        
-            if device_type == "cuda" and is_accum_step:
-                torch.cuda.synchronize()
-            
-            if step % 100 == 0:
+            loss_detached = loss.detach().clone()
+            if ddp:
                 with torch.no_grad():
-                    preds = logits.argmax(dim=-1)
-                    acc_local = (preds == y).float().mean().to(device)
-                    loss_local = loss_detached.clone().to(device)
+                    dist.all_reduce(loss_detached, op=dist.ReduceOp.AVG)
+                    
+            scaler.scale(loss).backward()
+        else:
+            logits = model(x)
+            loss = F.cross_entropy(logits.view(-1, config.vocab_size), y.view(-1))
+            loss = loss / config.gradient_accumulation_steps
+            
+            loss_detached = loss.detach().clone()
+            if ddp:
+                with torch.no_grad():
+                    dist.all_reduce(loss_detached, op=dist.ReduceOp.AVG)
 
-                if ddp:
-                    dist.reduce(acc_local, dst=0, op=dist.ReduceOp.SUM)
-                    dist.reduce(loss_local, dst=0, op=dist.ReduceOp.SUM)
+            loss.backward()
 
-                if is_master:
-                    world_size = dist.get_world_size() if ddp else 1
-                    accuracy = (acc_local / world_size).item()
-                    current_loss = (loss_local / world_size).item() * config.gradient_accumulation_steps
-                    perplexity = math.exp(min(current_loss, 20.0))
+        # Optimizer step after accumulation
+        if (step + 1) % config.gradient_accumulation_steps == 0:
+            if config.use_amp:
+                for optimizer in optimizers:
+                    scaler.unscale_(optimizer)
+                grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), config.grad_clip)
 
-                    pbar.set_postfix({
-                        'loss': f'{current_loss:.4f}',
-                        'acc': f'{accuracy:.3f}',
-                        'ppl': f'{perplexity:.1f}',
-                        'muon_lr': f'{optimizers[0].param_groups[0]["lr"]:.2e}',
-                        'adamw_lr': f'{optimizers[1].param_groups[0]["lr"]:.2e}'
-                    })
-                # Evaluation
-                if step % config.eval_every == 0 and step > 0 and is_master:
-                    model.eval()
-                    eval_metrics = evaluate_model(model, val_loader, config)
-                    val_losses.append(eval_metrics['val_loss'])
-                    train_eval_metrics = evaluate_model(model, train_loader, config)
-                    train_losses.append(train_eval_metrics['val_loss'])
-                    print(f"\nStep {step}: Val Loss: {eval_metrics['val_loss']:.4f}, "
-                        f"Train Loss: {train_eval_metrics['val_loss']:.4f}, "
-                        f"Val Acc: {eval_metrics['val_accuracy']:.4f}, "
-                        f"Val PPL: {eval_metrics['val_perplexity']:.2f}")
-                    model.train()
+                for optimizer in optimizers:
+                    scaler.step(optimizer)
+                    optimizer.zero_grad()
+                for scheduler in schedulers:
+                    scheduler.step()
+                scaler.update()
+            else:
+                grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), config.grad_clip)
+                for optimizer in optimizers:
+                    optimizer.step()
+                    optimizer.zero_grad()
+                for scheduler in schedulers:
+                    scheduler.step()
+                    
+        if device_type == "cuda" and is_accum_step:
+            torch.cuda.synchronize()
+        
+        if step % 100 == 0:
+            with torch.no_grad():
+                preds = logits.argmax(dim=-1)
+                acc_local = (preds == y).float().mean().to(device)
+                loss_local = loss_detached.clone().to(device)
 
-                    if eval_metrics['val_loss'] < best_val_loss:
-                        best_val_loss = eval_metrics['val_loss']
+            if ddp:
+                dist.reduce(acc_local, dst=0, op=dist.ReduceOp.SUM)
+                dist.reduce(loss_local, dst=0, op=dist.ReduceOp.SUM)
 
-            step += 1
-            if step % 50 == 0 and is_master:
-                pbar.update(50)
+            if is_master:
+                world_size = dist.get_world_size() if ddp else 1
+                accuracy = (acc_local / world_size).item()
+                current_loss = (loss_local / world_size).item() * config.gradient_accumulation_steps
+                perplexity = math.exp(min(current_loss, 20.0))
+
+                pbar.set_postfix({
+                    'loss': f'{current_loss:.4f}',
+                    'acc': f'{accuracy:.3f}',
+                    'ppl': f'{perplexity:.1f}',
+                    'muon_lr': f'{optimizers[0].param_groups[0]["lr"]:.2e}',
+                    'adamw_lr': f'{optimizers[1].param_groups[0]["lr"]:.2e}'
+                })
+            # Evaluation
+            if step % config.eval_every == 0 and step > 0 and is_master:
+                model.eval()
+                eval_metrics = evaluate_model(model, val_loader, config)
+                val_losses.append(eval_metrics['val_loss'])
+                train_eval_metrics = evaluate_model(model, train_loader, config)
+                train_losses.append(train_eval_metrics['val_loss'])
+                print(f"\nStep {step}: Val Loss: {eval_metrics['val_loss']:.4f}, "
+                    f"Train Loss: {train_eval_metrics['val_loss']:.4f}, "
+                    f"Val Acc: {eval_metrics['val_accuracy']:.4f}, "
+                    f"Val PPL: {eval_metrics['val_perplexity']:.2f}")
+                model.train()
+
+                if eval_metrics['val_loss'] < best_val_loss:
+                    best_val_loss = eval_metrics['val_loss']
+
+        step += 1
+        if step % 50 == 0 and is_master:
+            pbar.update(50)
     
     if ddp:
         dist.barrier()
