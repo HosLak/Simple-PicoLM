@@ -5,11 +5,9 @@ from torch.utils.data import DataLoader, Dataset
 from torch.cuda.amp import autocast, GradScaler
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.utils.data.distributed import DistributedSampler
 import os
 import math
 import time
-import sys
 from tqdm import tqdm
 
 from .config import ModelConfig
