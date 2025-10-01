@@ -87,14 +87,14 @@ class DataLoader:
         self.tokens = torch.tensor(tokens)
         
         self.current_position = self.batch_size * self.seq_len * self.process_rank
-
+        
     def next_batch(self):
         batch_size, seq_len = self.batch_size, self.seq_len
         buf = self.tokens[self.current_position:self.current_position + batch_size * seq_len + 1]
         x = (buf[:-1]).view(batch_size, seq_len)
         y = buf[1:].view(batch_size, seq_len)
         self.current_position += batch_size * seq_len * self.num_process
-        if self.current_position >= len(self.tokens):
+        if self.current_position + (batch_size * seq_len * self.num_process + 1) >= len(self.tokens):
             self.current_position = self.batch_size * self.seq_len * self.process_rank
         return x, y
 
