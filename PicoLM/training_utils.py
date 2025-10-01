@@ -124,7 +124,7 @@ def train_model(config: ModelConfig, train_dataset: list, val_dataset: list, is_
         ddp_local_rank = 0
         device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
-    if ddp:
+    if ddp == False:
         device_type = "cuda" if device.type.startswith("cuda") else "cpu"
     if device_type:
         pass
