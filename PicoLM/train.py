@@ -48,15 +48,16 @@ def main():
     tokens = load_cached_data(config)
     if tokens == None:
         sys.exit()
+    train_dataset = tokens[:int(len(tokens) * 0.9)]
+    val_dataset = tokens[int(len(tokens) * 0.9):]
+    # dataset = TextTokenDataset(tokens, config.max_seq_len, config.stride)
         
-    dataset = TextTokenDataset(tokens, config.max_seq_len, config.stride)
-    
     # Train/val split
-    val_size = len(dataset) // 10
-    train_size = len(dataset) - val_size
-    train_dataset, val_dataset = torch.utils.data.random_split(
-        dataset, [train_size, val_size], generator=torch.Generator().manual_seed(1337)
-    )
+    # val_size = len(tokens) // 10
+    # train_size = len(tokens) - val_size
+    # train_dataset, val_dataset = torch.utils.data.random_split(
+    #     dataset, [train_size, val_size], generator=torch.Generator().manual_seed(1337)
+    # )
     if is_master:
         num_gpus = torch.cuda.device_count()
         effective_batch_size = config.batch_size * config.gradient_accumulation_steps * config.max_seq_len * num_gpus
@@ -66,53 +67,53 @@ def main():
         print(f'DDP: {ddp}')
         
     shuffle = True
-    if ddp:
-        train_sampler = DistributedSampler(
-            train_dataset,
-            num_replicas=world_size,
-            rank=rank,
-            shuffle=True,
-            drop_last=False
-        )
+    # if ddp:
+    #     train_sampler = DistributedSampler(
+    #         train_dataset,
+    #         num_replicas=world_size,
+    #         rank=rank,
+    #         shuffle=True,
+    #         drop_last=False
+    #     )
         
-        valid_sampler = DistributedSampler(
-            val_dataset,
-            num_replicas=world_size,
-            rank=rank,
-            shuffle=False,
-            drop_last=False
-        )
-        shuffle = False
-    else:
-        train_sampler = None
-        valid_sampler = None
-        shuffle = True
+    #     valid_sampler = DistributedSampler(
+    #         val_dataset,
+    #         num_replicas=world_size,
+    #         rank=rank,
+    #         shuffle=False,
+    #         drop_last=False
+    #     )
+    #     shuffle = False
+    # else:
+    #     train_sampler = None
+    #     valid_sampler = None
+    #     shuffle = True
         
-    # Dataloader
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=config.batch_size,
-        shuffle=shuffle,
-        sampler=train_sampler,
-        num_workers=config.num_workers,
-        # pin_memory=torch.cuda.is_available(),
-        drop_last=True
-    )
+    # # Dataloader
+    # train_loader = DataLoader(
+    #     train_dataset,
+    #     batch_size=config.batch_size,
+    #     shuffle=shuffle,
+    #     sampler=train_sampler,
+    #     num_workers=config.num_workers,
+    #     # pin_memory=torch.cuda.is_available(),
+    #     drop_last=True
+    # )
     
-    valid_loader = DataLoader(
-        val_dataset,
-        batch_size=config.batch_size,
-        shuffle=shuffle,
-        sampler=valid_sampler,
-        num_workers=config.num_workers,
-        # pin_memory=torch.cuda.is_available(),
-        drop_last=False
-    )
+    # valid_loader = DataLoader(
+    #     val_dataset,
+    #     batch_size=config.batch_size,
+    #     shuffle=shuffle,
+    #     sampler=valid_sampler,
+    #     num_workers=config.num_workers,
+    #     # pin_memory=torch.cuda.is_available(),
+    #     drop_last=False
+    # )
     
     # Train model
     if is_master:
         start_time = time.time()
-    result = train_model(config, train_loader, valid_loader, is_master)
+    result = train_model(config, train_dataset, val_dataset, is_master, rank, world_size)
     
     if is_master:
         model, final_metrics = result

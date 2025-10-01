@@ -59,7 +59,7 @@ def load_cached_data(config: ModelConfig, chunk_id: int = None):
         return all_tokens
 
 class TextTokenDataset(Dataset):
-    def __init__(self, tokens: List[int], seq_len: int = 256, stride: int = 128):
+    def __init__(self, tokens: List[int], seq_len: int, stride: int):
         self.tokens = tokens
         self.seq_len = seq_len
         self.stride = stride if stride else seq_len

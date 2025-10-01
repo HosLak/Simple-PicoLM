@@ -77,8 +77,28 @@ def save_model(model, filepath="PicoLMModel.pt"):
     """Save only model weights (for inference)"""
     torch.save(model.state_dict(), filepath)
     print(f" Model weights saved to {filepath}")
+    
+class DataLoader:
+    def __init__(self, tokens, batch_size, seq_len, process_rank, num_process, split):
+        self.batch_size = batch_size
+        self.seq_len = seq_len
+        self.process_rank = process_rank
+        self.num_process = num_process
+        self.tokens = torch.tensor(tokens)
+        
+        self.current_position = self.batch_size * self.seq_len * self.process_rank
 
-def train_model(config: ModelConfig, train_loader: Dataset, val_loader: Dataset, is_master: bool = True):
+    def next_batch(self):
+        batch_size, seq_len = self.batch_size, self.seq_len
+        buf = self.tokens[self.current_position:self.current_position + batch_size * seq_len + 1]
+        x = (buf[:-1]).view(batch_size, seq_len)
+        y = buf[1:].view(batch_size, seq_len)
+        self.current_position += batch_size * seq_len * self.num_process
+        if self.current_position >= len(self.tokens):
+            self.current_position = self.batch_size * self.seq_len * self.process_rank
+        return x, y
+
+def train_model(config: ModelConfig, train_dataset: list, val_dataset: list, is_master: bool = True, rank: int = 0, world_size: int = 1):
     """Train the model with Muon optimizer"""
     if is_master:
         print(f"\n Training Small model with Muon optimizer")
@@ -106,10 +126,10 @@ def train_model(config: ModelConfig, train_loader: Dataset, val_loader: Dataset,
 
     device_type = "cuda" if device.startswith("cuda") else "cpu"
     model = model.to(device)
+    model = torch.compile(model)
     if ddp:
         model = DDP(model, device_ids=[ddp_local_rank])
         
-    model = torch.compile(model)
     raw_model = model.module if ddp else model
     
     if is_master:
@@ -149,57 +169,55 @@ def train_model(config: ModelConfig, train_loader: Dataset, val_loader: Dataset,
     val_losses = []
 
     # Compute initial validation and train loss
-    model.eval()
-    initial_eval = evaluate_model(model, val_loader, config)
-    val_losses.append(initial_eval['val_loss'])
-    print(f"\nInitial Val Loss: {initial_eval['val_loss']:.4f}, "
-          f"Val Acc: {initial_eval['val_accuracy']:.4f}, "
-          f"Val PPL: {initial_eval['val_perplexity']:.2f}")
+    # model.eval()
+    # initial_eval = evaluate_model(model, val_loader, config)
+    # val_losses.append(initial_eval['val_loss'])
+    # print(f"\nInitial Val Loss: {initial_eval['val_loss']:.4f}, "
+    #       f"Val Acc: {initial_eval['val_accuracy']:.4f}, "
+    #       f"Val PPL: {initial_eval['val_perplexity']:.2f}")
 
     # Compute initial train loss using evaluate_model
-    initial_train_eval = evaluate_model(model, train_loader, config)
-    train_losses.append(initial_train_eval['val_loss'])
-    print(f"Initial Train Loss: {initial_train_eval['val_loss']:.4f}")
+    # initial_train_eval = evaluate_model(model, train_loader, config)
+    # train_losses.append(initial_train_eval['val_loss'])
+    # print(f"Initial Train Loss: {initial_train_eval['val_loss']:.4f}")
 
     # Training loop
     model.train()
     step = 0
     start_time = time.time()
-    best_val_loss = float('inf')
+    # best_val_loss = float('inf')
 
     pbar = tqdm(total=config.max_steps, desc="Training")
-
-    data_iter = iter(cycle(train_loader))
+    train_loader = DataLoader(train_dataset, config.batch_size, config.max_seq_len, rank, world_size, "train")
+    val_loader = DataLoader(val_dataset, config.batch_size, config.max_seq_len, rank, world_size, "val")
+    
     for step in range(config.max_steps):
-        x, y = next(data_iter)
-        x, y = x.to(device), y.to(device)
         
-        is_accum_step = (step + 1) % config.gradient_accumulation_steps == 0
-        
-        if ddp:
-            model.require_backward_grad_sync = (is_accum_step)
-        if config.use_amp:
-            with autocast():
+        loss_accum = 0.0
+        for micro_step in range(config.gradient_accumulation_steps):
+            x, y = train_loader.next_batch()
+            x, y = x.to(device), y.to(device)
+            
+            is_accum_step = micro_step == config.gradient_accumulation_steps -1
+            
+            if ddp:
+                model.require_backward_grad_sync = (is_accum_step)
+            if config.use_amp:
+                with autocast():
+                    logits = model(x)
+                    loss = F.cross_entropy(logits.view(-1, config.vocab_size), y.view(-1))
+                    loss = loss / config.gradient_accumulation_steps
+                    loss_accum += loss.detach()     
+                scaler.scale(loss).backward()
+            else:
                 logits = model(x)
                 loss = F.cross_entropy(logits.view(-1, config.vocab_size), y.view(-1))
                 loss = loss / config.gradient_accumulation_steps
-            loss_detached = loss.detach().clone()
-            if ddp:
-                with torch.no_grad():
-                    dist.all_reduce(loss_detached, op=dist.ReduceOp.AVG)
-                    
-            scaler.scale(loss).backward()
-        else:
-            logits = model(x)
-            loss = F.cross_entropy(logits.view(-1, config.vocab_size), y.view(-1))
-            loss = loss / config.gradient_accumulation_steps
-            
-            loss_detached = loss.detach().clone()
-            if ddp:
-                with torch.no_grad():
-                    dist.all_reduce(loss_detached, op=dist.ReduceOp.AVG)
-
-            loss.backward()
+                loss_accum += loss.detach()
+                loss.backward()
+        
+        if ddp:
+            dist.all_reduce(loss_accum, op=dist.ReduceOp.AVG)
 
         # Optimizer step after accumulation
         if (step + 1) % config.gradient_accumulation_steps == 0:
@@ -222,49 +240,35 @@ def train_model(config: ModelConfig, train_loader: Dataset, val_loader: Dataset,
                 for scheduler in schedulers:
                     scheduler.step()
                     
-        if device_type == "cuda" and is_accum_step:
-            torch.cuda.synchronize()
         
         if step % 100 == 0:
-            with torch.no_grad():
-                preds = logits.argmax(dim=-1)
-                acc_local = (preds == y).float().mean().to(device)
-                loss_local = loss_detached.clone().to(device)
-
-            if ddp:
-                dist.reduce(acc_local, dst=0, op=dist.ReduceOp.SUM)
-                dist.reduce(loss_local, dst=0, op=dist.ReduceOp.SUM)
-
             if is_master:
-                world_size = dist.get_world_size() if ddp else 1
-                accuracy = (acc_local / world_size).item()
-                current_loss = (loss_local / world_size).item() * config.gradient_accumulation_steps
-                perplexity = math.exp(min(current_loss, 20.0))
+                perplexity = math.exp(min(loss_accum.item(), 20.0))
+                if device_type == "cuda":
+                    torch.cuda.synchronize()
 
                 pbar.set_postfix({
-                    'loss': f'{current_loss:.4f}',
-                    'acc': f'{accuracy:.3f}',
+                    'loss': f'{loss_accum.item():.4f}',
                     'ppl': f'{perplexity:.1f}',
                     'muon_lr': f'{optimizers[0].param_groups[0]["lr"]:.2e}',
                     'adamw_lr': f'{optimizers[1].param_groups[0]["lr"]:.2e}'
                 })
             # Evaluation
-            if step % config.eval_every == 0 and step > 0 and is_master:
-                model.eval()
-                eval_metrics = evaluate_model(model, val_loader, config)
-                val_losses.append(eval_metrics['val_loss'])
-                train_eval_metrics = evaluate_model(model, train_loader, config)
-                train_losses.append(train_eval_metrics['val_loss'])
-                print(f"\nStep {step}: Val Loss: {eval_metrics['val_loss']:.4f}, "
-                    f"Train Loss: {train_eval_metrics['val_loss']:.4f}, "
-                    f"Val Acc: {eval_metrics['val_accuracy']:.4f}, "
-                    f"Val PPL: {eval_metrics['val_perplexity']:.2f}")
-                model.train()
+            # if step % config.eval_every == 0 and step > 0 and is_master:
+            #     model.eval()
+            #     eval_metrics = evaluate_model(model, val_loader, config)
+            #     val_losses.append(eval_metrics['val_loss'])
+            #     train_eval_metrics = evaluate_model(model, train_loader, config)
+            #     train_losses.append(train_eval_metrics['val_loss'])
+            #     print(f"\nStep {step}: Val Loss: {eval_metrics['val_loss']:.4f}, "
+            #         f"Train Loss: {train_eval_metrics['val_loss']:.4f}, "
+            #         f"Val Acc: {eval_metrics['val_accuracy']:.4f}, "
+            #         f"Val PPL: {eval_metrics['val_perplexity']:.2f}")
+            #     model.train()
 
-                if eval_metrics['val_loss'] < best_val_loss:
-                    best_val_loss = eval_metrics['val_loss']
+            #     if eval_metrics['val_loss'] < best_val_loss:
+            #         best_val_loss = eval_metrics['val_loss']
 
-        step += 1
         if step % 50 == 0 and is_master:
             pbar.update(50)
     
