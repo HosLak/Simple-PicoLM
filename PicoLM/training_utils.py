@@ -94,6 +94,7 @@ class DataLoader:
         x = (buf[:-1]).view(batch_size, seq_len)
         y = buf[1:].view(batch_size, seq_len)
         self.current_position += batch_size * seq_len * self.num_process
+        
         if self.current_position + (batch_size * seq_len * self.num_process + 1) >= len(self.tokens):
             self.current_position = self.batch_size * self.seq_len * self.process_rank
         return x, y
@@ -290,15 +291,16 @@ def train_model(config: ModelConfig, train_dataset: list, val_dataset: list, is_
         pbar.close()
         training_time = time.time() - start_time
         print(f"   Training completed in {training_time:.1f} seconds")
-        model.eval()
-        final_eval = evaluate_model(model, val_loader, config)
-        final_train_eval = evaluate_model(model, train_loader, config)
-        val_losses.append(final_eval['val_loss'])
-        train_losses.append(final_train_eval['val_loss'])
-        print(f"   Final - Val Loss: {final_eval['val_loss']:.4f}, "
-            f"Train Loss: {final_train_eval['val_loss']:.4f}, "
-            f"Val Acc: {final_eval['val_accuracy']:.4f}, "
-            f"Val PPL: {final_eval['val_perplexity']:.2f}")
+        final_eval = None
+        # model.eval()
+        # final_eval = evaluate_model(model, val_loader, config)
+        # final_train_eval = evaluate_model(model, train_loader, config)
+        # val_losses.append(final_eval['val_loss'])
+        # train_losses.append(final_train_eval['val_loss'])
+        # print(f"   Final - Val Loss: {final_eval['val_loss']:.4f}, "
+            # f"Train Loss: {final_train_eval['val_loss']:.4f}, "
+            # f"Val Acc: {final_eval['val_accuracy']:.4f}, "
+            # f"Val PPL: {final_eval['val_perplexity']:.2f}")
 
         if ddp:
             try:
@@ -307,6 +309,6 @@ def train_model(config: ModelConfig, train_dataset: list, val_dataset: list, is_
                 pass
         # Print stored losses
         print("\n Train Losses:", [f"{x:.4f}" for x in train_losses])
-        print(" Validation Losses:", [f"{x:.4f}" for x in val_losses])
+        # print(" Validation Losses:", [f"{x:.4f}" for x in val_losses])
 
         return raw_model, final_eval
