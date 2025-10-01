@@ -119,7 +119,7 @@ def main():
         model, final_metrics = result
         total_time = time.time() - start_time
         print(f"\n TRAINING COMPLETED!")
-        save_model(model, "PicoLMModel.pt")
+        save_model(model.state_dict(), "PicoLMModel.pt")
         print(f" Total time: {total_time/60:.1f} minutes")
         print(f" Final Results:")
         # print(f"   Validation Loss: {final_metrics['val_loss']:.4f}")
