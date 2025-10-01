@@ -126,10 +126,9 @@ def train_model(config: ModelConfig, train_dataset: list, val_dataset: list, is_
 
     if ddp == False:
         device_type = "cuda" if device.type.startswith("cuda") else "cpu"
-    if device_type:
-        pass
     else:
         device_type = 'cuda' if device.startswith('cuda') else 'cpu'
+    
     model = model.to(device)
     model = torch.compile(model)
     if ddp:
