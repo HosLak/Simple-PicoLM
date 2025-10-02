@@ -529,6 +529,7 @@ start_time = time.time()
 # best_val_loss = float('inf')
 
 # pbar = tqdm(total=config.max_steps, desc="Training")
+# pbar = tqdm(total=config.max_steps, desc="Training")
 train_loader = DataLoader(train_dataset, config.batch_size, config.max_seq_len, rank, world_size, "train")
 val_loader = DataLoader(val_dataset, config.batch_size, config.max_seq_len, rank, world_size, "val")
 
@@ -537,6 +538,27 @@ for step in range(config.max_steps):
     
     # once in a while evaluate our validation loss
     if step % 250 == 0 or last_step:
+        model.eval()
+        val_loader.reset()
+        with torch.no_grad():
+            val_loss_accum = 0.0
+            val_loss_steps = 20
+            for _ in range(val_loss_steps):
+                x, y = val_loader.next_batch()
+                x, y = x.to(device), y.to(device)
+                logits = model(x)
+                loss = F.cross_entropy(logits.view(-1, config.vocab_size), y.view(-1))
+                loss = loss / val_loss_steps
+                val_loss_accum += loss.detach()
+        if ddp:
+            dist.all_reduce(val_loss_accum, op=dist.ReduceOp.AVG)
+        if is_master:
+            print(f"validation loss: {val_loss_accum.item():.4f}")
+    
+    model.train()
+    
+    # once in a while evaluate our validation loss
+    if step % 250 == 0:
         model.eval()
         val_loader.reset()
         with torch.no_grad():
@@ -636,6 +658,8 @@ for step in range(config.max_steps):
 
     # if step % 50 == 0 and is_master:
     #     pbar.update(50)
+    # if step % 50 == 0 and is_master:
+    #     pbar.update(50)
 
 if ddp:
     dist.barrier()
@@ -647,6 +671,7 @@ if ddp:
 
 # Final evaluation
 if is_master:
+    # pbar.close()
     # pbar.close()
     training_time = time.time() - start_time
     print(f"   Training completed in {training_time:.1f} seconds")
