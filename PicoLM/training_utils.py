@@ -3,8 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from torch.cuda.amp import autocast, GradScaler
-import torch.distributed as dist
-from torch.nn.parallel import DistributedDataParallel as DDP
 import math
 import time
 from tqdm import tqdm
@@ -85,29 +83,10 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
 
     # Initialize model
     set_seed(1337)
-    model = PicoLM(config)
-    
-    num_gpus = torch.cuda.device_count()
-
-    if num_gpus > 1:
-        print(f"Using {num_gpus} GPUs for DDP.")
-        dist.init_process_group(backend="nccl")
-        local_rank = dist.get_rank()
-        torch.cuda.set_device(local_rank)
-        device = torch.device(f"cuda:{local_rank}")
-    else:
-        print("Using single GPU or CPU.")
-        local_rank = 0 # Default for single GPU or CPU
-        device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-
-    model = model.to(device)
-
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    model = PicoLM(config).to(device)
     model_compiled = torch.compile(model)
 
-    if num_gpus > 1:
-        model_compiled = DDP(model_compiled, device_ids=[local_rank])
-
-    
     total_params = sum(p.numel() for p in model.parameters())
     print(f"   Total parameters: {total_params:,}")
 
@@ -172,20 +151,12 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
             # Forward pass with gradient accumulation
             if config.use_amp:
                 with autocast():
-                    if hasattr(model_compiled, 'module'):
-                        logits = model_compiled.module(x)
-                    else:
-                        logits = model_compiled(x)
-                        
+                    logits = model_compiled(x)
                     loss = F.cross_entropy(logits.view(-1, config.vocab_size), y.view(-1))
                     loss = loss / config.gradient_accumulation_steps
                 scaler.scale(loss).backward()
             else:
-                if hasattr(model_compiled, 'module'):
-                    logits = model_compiled.module(x)
-                else:
-                    logits = model_compiled(x)
-                    
+                logits = model_compiled(x)
                 loss = F.cross_entropy(logits.view(-1, config.vocab_size), y.view(-1))
                 loss = loss / config.gradient_accumulation_steps
                 loss.backward()
