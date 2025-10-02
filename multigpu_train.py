@@ -14,7 +14,7 @@ import time
 import warnings
 import os
 import sys
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader
 from torch.cuda.amp import autocast, GradScaler
 from torch.nn.parallel import DistributedDataParallel as DDP
 from tqdm import tqdm
@@ -387,19 +387,35 @@ class DataLoader:
         self.seq_len = seq_len
         self.process_rank = process_rank
         self.num_process = num_process
-        self.tokens = torch.tensor(tokens)
+                
+        total_tokens = len(tokens)
+        total_per_process = total_tokens // num_process
+        start_idx = process_rank * total_per_process
         
-        self.current_position = self.batch_size * self.seq_len * self.process_rank
+        if process_rank == num_process - 1:
+            end_idx = total_tokens
+        else: 
+            end_idx = start_idx + total_per_process
+            
+        self.tokens = torch.tensor(tokens[start_idx:end_idx])
+        self.current_position = 0
+        
+        print(f"Rank {process_rank}: Loaded {len(self.tokens):,} tokens (from {start_idx} to {end_idx})") 
         
     def next_batch(self):
         batch_size, seq_len = self.batch_size, self.seq_len
-        buf = self.tokens[self.current_position:self.current_position + batch_size * seq_len + 1]
+        needed_tokens = batch_size * seq_len + 1
+        
+        if self.current_position + needed_tokens >= len(self.tokens):
+            self.current_position = 0
+        
+        buf = self.tokens[self.current_position:self.current_position + needed_tokens]
+        
         x = (buf[:-1]).view(batch_size, seq_len)
         y = buf[1:].view(batch_size, seq_len)
-        self.current_position += batch_size * seq_len * self.num_process
         
-        if self.current_position + (batch_size * seq_len * self.num_process + 1) >= len(self.tokens):
-            self.current_position = self.batch_size * self.seq_len * self.process_rank
+        self.current_position += batch_size * seq_len
+        
         return x, y
 
 
@@ -582,57 +598,41 @@ for step in range(config.max_steps):
         dist.all_reduce(loss_accum, op=dist.ReduceOp.AVG)
 
     # Optimizer step after accumulation
-    if (step + 1) % config.gradient_accumulation_steps == 0:
-        if config.use_amp:
-            for optimizer in optimizers:
-                scaler.unscale_(optimizer)
-            grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), config.grad_clip)
 
-            for optimizer in optimizers:
-                scaler.step(optimizer)
-                optimizer.zero_grad()
-            for scheduler in schedulers:
-                scheduler.step()
-            scaler.update()
-        else:
-            grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), config.grad_clip)
-            for optimizer in optimizers:
-                optimizer.step()
-                optimizer.zero_grad()
-            for scheduler in schedulers:
-                scheduler.step()
-                
-        if step % 5 == 0 and is_master:
-            perplexity = math.exp(min(loss_accum.item(), 20.0))
-            if device_type == "cuda":
-                torch.cuda.synchronize()
-            t1 = time.time()
-            dt = t1 - t0
-            # iteration_per_second = 1 / dt
+    if config.use_amp:
+        for optimizer in optimizers:
+            scaler.unscale_(optimizer)
+        grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), config.grad_clip)
 
-            # print(f"Step {step} - Loss: {loss_accum.item():.4f},Time: {dt*1000:.2f}ms, it's {iteration_per_second:.1f} it/s, Perplexity: {perplexity:.1f}, AdamW LR: {optimizers[1].param_groups[0]['lr']:.2e}")
+        for optimizer in optimizers:
+            scaler.step(optimizer)
+            optimizer.zero_grad()
+        scaler.update()
+    else:
+        grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), config.grad_clip)
+        for optimizer in optimizers:
+            optimizer.step()
+            optimizer.zero_grad()
+
+    for scheduler in schedulers:
+        scheduler.step()
             
-            pbar.set_postfix({
-                'loss': f'{loss_accum.item():.4f}',
-                'dt': f'{dt*1000:.2f}ms',
-                'ppl': f'{perplexity:.1f}',
-                'muon_lr': f'{optimizers[0].param_groups[0]["lr"]:.2e}',
-                'adamw_lr': f'{optimizers[1].param_groups[0]["lr"]:.2e}'
-            })
-        # if step % config.eval_every == 0 and step > 0 and is_master:
-        #     model.eval()
-        #     eval_metrics = evaluate_model(model, val_loader, config)
-        #     val_losses.append(eval_metrics['val_loss'])
-        #     train_eval_metrics = evaluate_model(model, train_loader, config)
-        #     train_losses.append(train_eval_metrics['val_loss'])
-        #     print(f"\nStep {step}: Val Loss: {eval_metrics['val_loss']:.4f}, "
-        #         f"Train Loss: {train_eval_metrics['val_loss']:.4f}, "
-        #         f"Val Acc: {eval_metrics['val_accuracy']:.4f}, "
-        #         f"Val PPL: {eval_metrics['val_perplexity']:.2f}")
-        #     model.train()
+    if step % 5 == 0 and is_master:
+        perplexity = math.exp(min(loss_accum.item(), 20.0))
+        if device_type == "cuda":
+            torch.cuda.synchronize()
+        t1 = time.time()
+        dt = t1 - t0
 
-        #     if eval_metrics['val_loss'] < best_val_loss:
-        #         best_val_loss = eval_metrics['val_loss']
+        # print(f"Step {step} - Loss: {loss_accum.item():.4f},Time: {dt*1000:.2f}ms, Perplexity: {perplexity:.1f}, AdamW LR: {optimizers[1].param_groups[0]['lr']:.2e}")
+        
+        pbar.set_postfix({
+            'loss': f'{loss_accum.item():.4f}',
+            'dt': f'{dt*1000:.2f}ms',
+            'ppl': f'{perplexity:.1f}',
+            'muon_lr': f'{optimizers[0].param_groups[0]["lr"]:.2e}',
+            'adamw_lr': f'{optimizers[1].param_groups[0]["lr"]:.2e}'
+        })
 
     if step % 5 == 0 and is_master:
         pbar.update(5)
