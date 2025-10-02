@@ -534,33 +534,9 @@ train_loader = DataLoader(train_dataset, config.batch_size, config.max_seq_len, 
 val_loader = DataLoader(val_dataset, config.batch_size, config.max_seq_len, rank, world_size, "val")
 
 for step in range(config.max_steps):
-    last_step = step == config.max_steps - 1
-    
-    # once in a while evaluate our validation loss
-    if step % 250 == 0 or last_step:
-        model.eval()
-        val_loader.reset()
-        with torch.no_grad():
-            val_loss_accum = 0.0
-            val_loss_steps = 20
-            for _ in range(val_loss_steps):
-                x, y = val_loader.next_batch()
-                x, y = x.to(device), y.to(device)
-                logits = model(x)
-                loss = F.cross_entropy(logits.view(-1, config.vocab_size), y.view(-1))
-                loss = loss / val_loss_steps
-                val_loss_accum += loss.detach()
-        if ddp:
-            dist.all_reduce(val_loss_accum, op=dist.ReduceOp.AVG)
-        if is_master:
-            print(f"validation loss: {val_loss_accum.item():.4f}")
-    
-    model.train()
-    
     # once in a while evaluate our validation loss
     if step % 250 == 0:
         model.eval()
-        val_loader.reset()
         with torch.no_grad():
             val_loss_accum = 0.0
             val_loss_steps = 20
@@ -575,6 +551,7 @@ for step in range(config.max_steps):
             dist.all_reduce(val_loss_accum, op=dist.ReduceOp.AVG)
         if is_master:
             print(f"validation loss: {val_loss_accum.item():.4f}")
+    
     
     model.train()
     t0 = time.time()
@@ -584,9 +561,10 @@ for step in range(config.max_steps):
         x, y = x.to(device), y.to(device)
         
         is_accum_step = micro_step == config.gradient_accumulation_steps -1
-        
         if ddp:
             model.require_backward_grad_sync = (is_accum_step)
+            
+            
         if config.use_amp:
             with autocast():
                 logits = model(x)
