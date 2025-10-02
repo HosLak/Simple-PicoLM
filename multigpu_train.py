@@ -668,6 +668,7 @@ if is_master:
             pass
     # Print stored losses
     print("\n Train Losses:", [f"{x:.4f}" for x in train_losses])
+    print(f'final train loss: {loss_accum.item():.4f}')
     # print(" Validation Losses:", [f"{x:.4f}" for x in val_losses])
 
 
