@@ -9,15 +9,11 @@ import random
 import numpy as np
 import os
 import pickle
-import torch.distributed as dist
 import time
 import warnings
-import os
-import sys
-from torch.utils.data import DataLoader
-from torch.cuda.amp import autocast, GradScaler
-from torch.nn.parallel import DistributedDataParallel as DDP
 from tqdm import tqdm
+from accelerate import Accelerator
+from accelerate.utils import set_seed as accelerate_set_seed
 
 warnings.filterwarnings('ignore')
 
@@ -35,7 +31,7 @@ class ModelConfig:
     # Training parameters
     batch_size: int = 16
     gradient_accumulation_steps: int = 4 # 16 * 4 = 64
-    max_steps: int = 1500 # max_tokens // (batch_size * gradient_accumulation_steps * max_seq_len) = 1 epoch
+    max_steps: int = 1500
     muon_lr: float = 1e-2
     adamw_lr: float = 2e-3
     adamw_betas: tuple = (0.9, 0.95)
@@ -44,11 +40,11 @@ class ModelConfig:
     max_seq_len: int = 256
     multiple_of: int = 128
     stride: int = field(init=False)
-    max_tokens: int = -1 # -1 if you want to ues entire of dataset
+    max_tokens: int = -1
     dataset_name: str = "Hosseinlack123/PicoLM-dataset"
     tokenizer_name: str = "Hosseinlack123/PicoLM-tokenizer"
     data_cache_dir: str = "data_cache"
-    data_chunk_size: int = 1e7 # 10m tokens
+    data_chunk_size: int = 1e7
     dataset_split: str = 'train'
 
     # Evaluation
@@ -70,13 +66,11 @@ class ModelConfig:
         assert self.d_model % self.n_heads == 0, "d_model must be divisible by n_heads"
         self.d_k = self.d_model // self.n_heads
         
-        # Set stride conditionally
         if self.max_tokens > 10000000:
             self.stride = self.max_seq_len // 2
         else:
             self.stride = self.max_seq_len
         
-        # Set d_ff to 4 times d_model
         self.d_ff = int(self.multiple_of * int((((self.d_model * 4 * 2 / 3) * 1.3) + self.multiple_of + 1) // self.multiple_of))
         
         assert self.n_heads % 4 == 0, "n_heads must be divisible by 4"
@@ -111,6 +105,7 @@ class PicoRotary(nn.Module):
         y1 = x1 * cos + x2 * sin
         y2 = x1 * (-sin) + x2 * cos
         return torch.cat((y1, y2), 3).type_as(x_BTHD)
+
 
 class PicoAttn(nn.Module):
     def __init__(self, d_model: int, n_heads: int, n_kv_heads: int, max_seq_len: int, dropout: float = 0.1, rope_theta: float = 10000.0):
@@ -165,23 +160,23 @@ class PicoAttn(nn.Module):
         attn_output = attn_output.transpose(1, 2).reshape(batch_size, seq_len, self.d_model)
         return self.w_o(attn_output)
 
+
 class PicoMLP(nn.Module):
     def __init__(self, d_model: int, d_ff: int, n_layers: int, layer_idx: int, dropout: float = 0.1):
         super().__init__()
 
         self.d_ff = 16 * round(((1.5 + (4.0 - 1.5) * ((layer_idx - 1) / (n_layers - 1))) * d_model) / 16)
 
-        self.w1 = nn.Linear(d_model, self.d_ff, bias=False) # up_proj
-        self.w2 = nn.Linear(self.d_ff, d_model, bias=False) # down_proj
-        self.w3 = nn.Linear(d_model, self.d_ff, bias=False) # gate_proj
+        self.w1 = nn.Linear(d_model, self.d_ff, bias=False)
+        self.w2 = nn.Linear(self.d_ff, d_model, bias=False)
+        self.w3 = nn.Linear(d_model, self.d_ff, bias=False)
         self.w3.zero_init = 1
         
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x):
-        # Gated Linear Unit (GLU)
         return self.w2(self.dropout(F.silu(self.w1(x)) * self.w3(x)))
-    
+
 
 class PicoBlock(nn.Module):
     def __init__(self, d_model: int, n_heads: int, n_kv_heads: int, d_ff: int, max_seq_len: int, n_layers: int, layer_idx: int, dropout: float = 0.1, rope_theta: float = 10000.0):
@@ -205,6 +200,7 @@ class PicoBlock(nn.Module):
         
         return x + self.dropout(ff_out)
 
+
 class PicoLM(nn.Module):
     def __init__(self, config: ModelConfig):
         super().__init__()
@@ -222,14 +218,11 @@ class PicoLM(nn.Module):
         self.norm = nn.RMSNorm(config.d_model)
         self.output_dropout = nn.Dropout(config.dropout)
 
-        # UnTie weights
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
-        # self.lm_head.weight = self.token_embedding.weight
         self.lm_head.zero_init = 1
 
         self.apply(self._init_weights)
         
-        # Depth-aware init
         for i, block in enumerate(self.transformer_blocks):
             std = 0.04 - (i / (config.n_layers - 1)) * 0.04 if config.n_layers > 1 else 0.02
             torch.nn.init.normal_(block.feed_forward.w1.weight, mean=0.0, std=std)
@@ -259,8 +252,8 @@ class PicoLM(nn.Module):
         x = self.output_dropout(x)
         logits = self.lm_head(x)
         return logits
-    
-    
+
+
 def zeropower_via_newtonschulz5(G: torch.Tensor, steps: int = 5) -> torch.Tensor:
     assert G.ndim >= 2
     a, b, c = (3.4445, -4.7750, 2.0315)
@@ -280,6 +273,7 @@ def zeropower_via_newtonschulz5(G: torch.Tensor, steps: int = 5) -> torch.Tensor
         X = X.mT
 
     return X
+
 
 class Muon(torch.optim.Optimizer):
     def __init__(self, params, lr=0.02, momentum=0.95, nesterov=True, ns_steps=5):
@@ -315,6 +309,7 @@ def set_seed(seed: int = 1337, log: bool = False):
     torch.backends.cudnn.benchmark = False
     if log:
         print(f"Set all seeds to {seed}")
+
 
 def load_cached_data(config: ModelConfig, chunk_id: int = None):
     os.makedirs(config.data_cache_dir, exist_ok=True)
@@ -355,7 +350,8 @@ def load_cached_data(config: ModelConfig, chunk_id: int = None):
 
         print(f"Loaded total {len(all_tokens):,} tokens from {len(chunk_files)} chunks")
         return all_tokens
-    
+
+
 def setup_muon_optimizer(model: nn.Module, config: ModelConfig):
     muon_params = []
     adamw_params = []
@@ -377,10 +373,12 @@ def setup_muon_optimizer(model: nn.Module, config: ModelConfig):
 
     return [muon_optimizer, adamw_optimizer]
 
+
 def save_model(model, filepath="PicoLMModel.pt"):
     torch.save(model.state_dict(), filepath)
     print(f" Model weights saved to {filepath}")
-    
+
+
 class DataLoader:
     def __init__(self, tokens, batch_size, seq_len, process_rank, num_process, split):
         self.batch_size = batch_size
@@ -419,39 +417,29 @@ class DataLoader:
         return x, y
 
 
+# ============= MAIN TRAINING CODE WITH ACCELERATE =============
 
-
-num_gpus = torch.cuda.device_count()
-dist.init_process_group(backend="nccl")
-ddp = int(os.environ.get('RANK', -1)) != -1
-rank = int(os.environ.get('RANK', 0))
-local_rank = int(os.environ.get('LOCAL_RANK', 0))
-world_size = int(os.environ.get('WORLD_SIZE', 1))
-is_master = rank == 0
-
-if is_master:
-    print(f"Using {num_gpus} GPUs for DDP.")
-device = f'cuda:{local_rank}'
-torch.cuda.set_device(device)
-
-device_type = 'cuda' if device.startswith('cuda') else 'cpu'
-
-if is_master:
-    print(f"Device: {'CUDA' if torch.cuda.is_available() else 'CPU'}")
-    if torch.cuda.is_available():
-        try:
-            print(f'GPU {torch.cuda.get_device_name(local_rank)}')
-            print(f"Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
-        except Exception:
-            pass
-    print(f"Available GPUs: {torch.cuda.device_count()}")
+# Initialize Accelerator
+accelerator = Accelerator(
+    gradient_accumulation_steps=4,
+    mixed_precision='fp16' if True else 'no',  # می‌تونید 'bf16' هم استفاده کنید
+    log_with=None,
+)
 
 # Set seed
 set_seed(1337)
+accelerate_set_seed(1337)
 
 # Create config
 config = ModelConfig()
-if is_master:
+
+if accelerator.is_main_process:
+    print(f"\n{'='*60}")
+    print(f"🚀 Training with Accelerate")
+    print(f"{'='*60}")
+    print(f"Device: {accelerator.device}")
+    print(f"Number of processes: {accelerator.num_processes}")
+    print(f"Mixed precision: {accelerator.mixed_precision}")
     print(f"\nModel Configuration:")
     print(f"   Architecture: {config.d_model}d, {config.n_layers}L, {config.n_heads}H, {config.d_ff}ff")
     print(f"   Training: {config.max_steps} steps, batch size {config.batch_size}")
@@ -459,46 +447,32 @@ if is_master:
 
 # Load data
 tokens = load_cached_data(config)
-if tokens == None:
-    print('No cached data found, please run run_cache_dataset.py first')
-    sys.exit()
-    
+if tokens is None:
+    if accelerator.is_main_process:
+        print('No cached data found, please run run_cache_dataset.py first')
+    exit()
+
 train_dataset = tokens[:int(len(tokens) * 0.9)]
 val_dataset = tokens[int(len(tokens) * 0.9):]
-    
 
-if is_master:
-    num_gpus = torch.cuda.device_count()
-    effective_batch_size = config.batch_size * config.gradient_accumulation_steps * config.max_seq_len * num_gpus
-    print(f'Effective Batch Size: {effective_batch_size}, and for each gpu -> {effective_batch_size//num_gpus}')
-    print(f"Dataset: {len(train_dataset)} train, {len(val_dataset)} val samples")
-    print()
-    print(f'DDP: {ddp}')
-    
-    # Train model
-    print(f"\n Training Small model with Muon optimizer")
+if accelerator.is_main_process:
+    effective_batch_size = config.batch_size * config.gradient_accumulation_steps * config.max_seq_len * accelerator.num_processes
+    print(f'\nEffective Batch Size: {effective_batch_size:,}')
+    print(f"Per GPU Batch Size: {effective_batch_size // accelerator.num_processes:,}")
+    print(f"Dataset: {len(train_dataset):,} train, {len(val_dataset):,} val tokens")
+    print(f"\n🔧 Training Small model with Muon optimizer\n")
 
 # Initialize model
 model = PicoLM(config)
 
-model = model.to(device)
-model = torch.compile(model)
-
-if ddp:
-    model = DDP(model, device_ids=[local_rank])
-    
-raw_model = model.module if ddp else model
-
-if is_master:
+if accelerator.is_main_process:
     total_params = sum(p.numel() for p in model.parameters())
     print(f"   Total parameters: {total_params:,}")
-    total_batch_size = config.batch_size * config.gradient_accumulation_steps * config.max_seq_len * num_gpus
-    print(f"total batch size: {total_batch_size}")
 
 # Setup optimizers
-optimizers = setup_muon_optimizer(raw_model, config)
+optimizers = setup_muon_optimizer(model, config)
 
-# Learning rate schedule
+# Learning rate schedulers
 schedulers = []
 for optimizer in optimizers:
     effective_max_steps = config.max_steps // config.gradient_accumulation_steps
@@ -510,7 +484,7 @@ for optimizer in optimizers:
         if step < warmup_steps:
             return float(step) / float(max(1, warmup_steps))
         elif step < milestone1:
-            return 1
+            return 1.0
         elif step < milestone2:
             return 0.316
         else:
@@ -519,111 +493,99 @@ for optimizer in optimizers:
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
     schedulers.append(scheduler)
 
-scaler = GradScaler() if config.use_amp else None
+# Prepare everything with accelerator
+model, *optimizers = accelerator.prepare(model, *optimizers)
 
-# Initialize lists to store losses
-train_losses = []
-val_losses = []
+# Data loaders
+train_loader = DataLoader(
+    train_dataset, 
+    config.batch_size, 
+    config.max_seq_len, 
+    accelerator.process_index, 
+    accelerator.num_processes, 
+    "train"
+)
 
-# Compute initial validation and train loss
-# model.eval()
-# initial_eval = evaluate_model(model, val_loader, config)
-# val_losses.append(initial_eval['val_loss'])
-# print(f"\nInitial Val Loss: {initial_eval['val_loss']:.4f}, "
-#       f"Val Acc: {initial_eval['val_accuracy']:.4f}, "
-#       f"Val PPL: {initial_eval['val_perplexity']:.2f}")
-
-# Compute initial train loss using evaluate_model
-# initial_train_eval = evaluate_model(model, train_loader, config)
-# train_losses.append(initial_train_eval['val_loss'])
-# print(f"Initial Train Loss: {initial_train_eval['val_loss']:.4f}")
+val_loader = DataLoader(
+    val_dataset, 
+    config.batch_size, 
+    config.max_seq_len, 
+    accelerator.process_index, 
+    accelerator.num_processes, 
+    "val"
+)
 
 # Training loop
 model.train()
-step = 0
 start_time = time.time()
-# best_val_loss = float('inf')
 
-pbar = tqdm(total=config.max_steps, desc="Training")
-train_loader = DataLoader(train_dataset, config.batch_size, config.max_seq_len, rank, world_size, "train")
-val_loader = DataLoader(val_dataset, config.batch_size, config.max_seq_len, rank, world_size, "val")
+if accelerator.is_main_process:
+    pbar = tqdm(total=config.max_steps, desc="Training")
 
 for step in range(config.max_steps):
-    # once in a while evaluate our validation loss
+    # Validation
     if step % 250 == 0:
         model.eval()
+        val_loss_accum = 0.0
+        val_loss_steps = 20
+        
         with torch.no_grad():
-            val_loss_accum = 0.0
-            val_loss_steps = 20
             for _ in range(val_loss_steps):
                 x, y = val_loader.next_batch()
-                x, y = x.to(device), y.to(device)
+                x, y = x.to(accelerator.device), y.to(accelerator.device)
+                
                 logits = model(x)
                 loss = F.cross_entropy(logits.view(-1, config.vocab_size), y.view(-1))
-                loss = loss / val_loss_steps
-                val_loss_accum += loss.detach()
-        if ddp:
-            dist.all_reduce(val_loss_accum, op=dist.ReduceOp.AVG)
-        if is_master:
-            print(f"validation loss: {val_loss_accum.item():.4f}")
-    
-    
-    model.train()
-    t0 = time.time()
-    loss_accum = 0.0
-    for micro_step in range(config.gradient_accumulation_steps):
-        x, y = train_loader.next_batch()
-        x, y = x.to(device), y.to(device)
+                val_loss_accum += loss / val_loss_steps
         
-        is_accum_step = micro_step == config.gradient_accumulation_steps -1
-        if ddp:
-            model.require_backward_grad_sync = (is_accum_step)
+        # Gather validation loss from all processes
+        val_loss_accum = accelerator.gather(val_loss_accum).mean()
+        
+        if accelerator.is_main_process:
+            print(f"\nValidation loss: {val_loss_accum.item():.4f}")
+        
+        model.train()
+    
+    # Training step
+    t0 = time.time()
+    
+    with accelerator.accumulate(model):
+        loss_accum = 0.0
+        
+        for micro_step in range(config.gradient_accumulation_steps):
+            x, y = train_loader.next_batch()
+            x, y = x.to(accelerator.device), y.to(accelerator.device)
             
-            
-        if config.use_amp:
-            with autocast():
-                logits = model(x)
-                loss = F.cross_entropy(logits.view(-1, config.vocab_size), y.view(-1))
-                loss = loss / config.gradient_accumulation_steps
-                loss_accum += loss.detach()
-            scaler.scale(loss).backward()
-        else:
             logits = model(x)
             loss = F.cross_entropy(logits.view(-1, config.vocab_size), y.view(-1))
             loss = loss / config.gradient_accumulation_steps
+            
+            # Accelerate handles backward automatically
+            accelerator.backward(loss)
             loss_accum += loss.detach()
-            loss.backward()
-    
-    if ddp:
-        dist.all_reduce(loss_accum, op=dist.ReduceOp.AVG)
-
-    # Optimizer step after accumulation
-    if config.use_amp:
-        for optimizer in optimizers:
-            scaler.unscale_(optimizer)
-        grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), config.grad_clip)
-
-        for optimizer in optimizers:
-            scaler.step(optimizer)
-            optimizer.zero_grad()
-        scaler.update()
-    else:
-        grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), config.grad_clip)
+        
+        # Gather loss from all processes
+        loss_accum = accelerator.gather(loss_accum).mean()
+        
+        # Gradient clipping
+        if accelerator.sync_gradients:
+            accelerator.clip_grad_norm_(model.parameters(), config.grad_clip)
+        
+        # Optimizer step
         for optimizer in optimizers:
             optimizer.step()
             optimizer.zero_grad()
-
+    
+    # Scheduler step
     for scheduler in schedulers:
         scheduler.step()
-            
-    if step % 5 == 0 and is_master:
+    
+    # Logging
+    if step % 5 == 0 and accelerator.is_main_process:
         perplexity = math.exp(min(loss_accum.item(), 20.0))
-        if device_type == "cuda":
-            torch.cuda.synchronize()
+        torch.cuda.synchronize()
         t1 = time.time()
         dt = t1 - t0
-
-        # print(f"Step {step} - Loss: {loss_accum.item():.4f},Time: {dt*1000:.2f}ms, Perplexity: {perplexity:.1f}, AdamW LR: {optimizers[1].param_groups[0]['lr']:.2e}")
         
         pbar.set_postfix({
             'loss': f'{loss_accum.item():.4f}',
@@ -632,51 +594,22 @@ for step in range(config.max_steps):
             'muon_lr': f'{optimizers[0].param_groups[0]["lr"]:.2e}',
             'adamw_lr': f'{optimizers[1].param_groups[0]["lr"]:.2e}'
         })
-
-    if step % 5 == 0 and is_master:
         pbar.update(5)
 
-if ddp:
-    dist.barrier()
-    if not is_master:
-        try:
-            dist.destroy_process_group()
-        except Exception:
-            pass
+# Wait for all processes
+accelerator.wait_for_everyone()
 
-# Final evaluation
-if is_master:
+# Save model
+if accelerator.is_main_process:
     pbar.close()
     training_time = time.time() - start_time
-    print(f"   Training completed in {training_time:.1f} seconds")
-    final_eval = None
-    # model.eval()
-    # final_eval = evaluate_model(model, val_loader, config)
-    # final_train_eval = evaluate_model(model, train_loader, config)
-    # val_losses.append(final_eval['val_loss'])
-    # train_losses.append(final_train_eval['val_loss'])
-    # print(f"   Final - Val Loss: {final_eval['val_loss']:.4f}, "
-        # f"Train Loss: {final_train_eval['val_loss']:.4f}, "
-        # f"Val Acc: {final_eval['val_accuracy']:.4f}, "
-        # f"Val PPL: {final_eval['val_perplexity']:.2f}")
-
-    if ddp:
-        try:
-            dist.destroy_process_group()
-        except Exception:
-            pass
-    # Print stored losses
-    print("\n Train Losses:", [f"{x:.4f}" for x in train_losses])
-    print(f'final train loss: {loss_accum.item():.4f}')
-    # print(" Validation Losses:", [f"{x:.4f}" for x in val_losses])
-
-
-if is_master:
-    total_time = time.time() - start_time
-    print(f"\n TRAINING COMPLETED!")
-    save_model(raw_model, "PicoLMModel.pt")
-    print(f" Total time: {total_time/60:.1f} minutes")
-    print(f" Final Results:")
-    # print(f"   Validation Loss: {final_metrics['val_loss']:.4f}")
-    # print(f"   Validation Accuracy: {final_metrics['val_accuracy']:.4f}")
-    # print(f"   Validation Perplexity: {final_metrics['val_perplexity']:.2f}")
+    print(f"\n{'='*60}")
+    print(f"✅ TRAINING COMPLETED!")
+    print(f"{'='*60}")
+    print(f"   Training time: {training_time/60:.1f} minutes")
+    print(f"   Final train loss: {loss_accum.item():.4f}")
+    
+    # Unwrap model before saving
+    unwrapped_model = accelerator.unwrap_model(model)
+    save_model(unwrapped_model, "PicoLMModel.pt")
+    print(f"\n🎉 Done!")
