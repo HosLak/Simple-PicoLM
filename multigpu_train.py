@@ -569,7 +569,7 @@ for step in range(config.max_steps):
                 logits = model(x)
                 loss = F.cross_entropy(logits.view(-1, config.vocab_size), y.view(-1))
                 loss = loss / config.gradient_accumulation_steps
-                loss_accum += loss.detach()     
+                loss_accum += loss.detach()
             scaler.scale(loss).backward()
         else:
             logits = model(x)
@@ -674,7 +674,7 @@ if is_master:
 if is_master:
     total_time = time.time() - start_time
     print(f"\n TRAINING COMPLETED!")
-    save_model(raw_model.state_dict(), "PicoLMModel.pt")
+    save_model(raw_model, "PicoLMModel.pt")
     print(f" Total time: {total_time/60:.1f} minutes")
     print(f" Final Results:")
     # print(f"   Validation Loss: {final_metrics['val_loss']:.4f}")
