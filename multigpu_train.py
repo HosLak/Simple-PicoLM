@@ -528,11 +528,33 @@ step = 0
 start_time = time.time()
 # best_val_loss = float('inf')
 
-pbar = tqdm(total=config.max_steps, desc="Training")
+# pbar = tqdm(total=config.max_steps, desc="Training")
 train_loader = DataLoader(train_dataset, config.batch_size, config.max_seq_len, rank, world_size, "train")
 val_loader = DataLoader(val_dataset, config.batch_size, config.max_seq_len, rank, world_size, "val")
 
 for step in range(config.max_steps):
+    last_step = step == config.max_steps - 1
+    
+    # once in a while evaluate our validation loss
+    if step % 250 == 0 or last_step:
+        model.eval()
+        val_loader.reset()
+        with torch.no_grad():
+            val_loss_accum = 0.0
+            val_loss_steps = 20
+            for _ in range(val_loss_steps):
+                x, y = val_loader.next_batch()
+                x, y = x.to(device), y.to(device)
+                logits = model(x)
+                loss = F.cross_entropy(logits.view(-1, config.vocab_size), y.view(-1))
+                loss = loss / val_loss_steps
+                val_loss_accum += loss.detach()
+        if ddp:
+            dist.all_reduce(val_loss_accum, op=dist.ReduceOp.AVG)
+        if is_master:
+            print(f"validation loss: {val_loss_accum.item():.4f}")
+    
+    model.train()
     t0 = time.time()
     loss_accum = 0.0
     for micro_step in range(config.gradient_accumulation_steps):
@@ -581,23 +603,24 @@ for step in range(config.max_steps):
             for scheduler in schedulers:
                 scheduler.step()
                 
-    
-    if step % 100 == 0:
-        if is_master:
+        if step % 5 == 0 and is_master:
             perplexity = math.exp(min(loss_accum.item(), 20.0))
             if device_type == "cuda":
                 torch.cuda.synchronize()
             t1 = time.time()
             dt = t1 - t0
 
-            pbar.set_postfix({
-                'loss': f'{loss_accum.item():.4f}',
-                'dt': f'{dt*1000:.2f}ms',
-                'ppl': f'{perplexity:.1f}',
-                'muon_lr': f'{optimizers[0].param_groups[0]["lr"]:.2e}',
-                'adamw_lr': f'{optimizers[1].param_groups[0]["lr"]:.2e}'
-            })
-        # Evaluation
+            print(f"Step {step} - Loss: {loss_accum.item():.4f},
+                Time: {dt*1000:.2f}ms, Perplexity: {perplexity:.1f},
+                AdamW LR: {optimizers[1].param_groups[0]['lr']:.2e}")
+            
+            # pbar.set_postfix({
+            #     'loss': f'{loss_accum.item():.4f}',
+            #     'dt': f'{dt*1000:.2f}ms',
+            #     'ppl': f'{perplexity:.1f}',
+            #     'muon_lr': f'{optimizers[0].param_groups[0]["lr"]:.2e}',
+            #     'adamw_lr': f'{optimizers[1].param_groups[0]["lr"]:.2e}'
+            # })
         # if step % config.eval_every == 0 and step > 0 and is_master:
         #     model.eval()
         #     eval_metrics = evaluate_model(model, val_loader, config)
@@ -613,8 +636,8 @@ for step in range(config.max_steps):
         #     if eval_metrics['val_loss'] < best_val_loss:
         #         best_val_loss = eval_metrics['val_loss']
 
-    if step % 50 == 0 and is_master:
-        pbar.update(50)
+    # if step % 50 == 0 and is_master:
+    #     pbar.update(50)
 
 if ddp:
     dist.barrier()
@@ -626,7 +649,7 @@ if ddp:
 
 # Final evaluation
 if is_master:
-    pbar.close()
+    # pbar.close()
     training_time = time.time() - start_time
     print(f"   Training completed in {training_time:.1f} seconds")
     final_eval = None
