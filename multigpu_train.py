@@ -528,8 +528,7 @@ step = 0
 start_time = time.time()
 # best_val_loss = float('inf')
 
-# pbar = tqdm(total=config.max_steps, desc="Training")
-# pbar = tqdm(total=config.max_steps, desc="Training")
+pbar = tqdm(total=config.max_steps, desc="Training")
 train_loader = DataLoader(train_dataset, config.batch_size, config.max_seq_len, rank, world_size, "train")
 val_loader = DataLoader(val_dataset, config.batch_size, config.max_seq_len, rank, world_size, "val")
 
@@ -609,16 +608,17 @@ for step in range(config.max_steps):
                 torch.cuda.synchronize()
             t1 = time.time()
             dt = t1 - t0
+            # iteration_per_second = 1 / dt
 
-            print(f"Step {step} - Loss: {loss_accum.item():.4f},Time: {dt*1000:.2f}ms, Perplexity: {perplexity:.1f}, AdamW LR: {optimizers[1].param_groups[0]['lr']:.2e}")
+            # print(f"Step {step} - Loss: {loss_accum.item():.4f},Time: {dt*1000:.2f}ms, it's {iteration_per_second:.1f} it/s, Perplexity: {perplexity:.1f}, AdamW LR: {optimizers[1].param_groups[0]['lr']:.2e}")
             
-            # pbar.set_postfix({
-            #     'loss': f'{loss_accum.item():.4f}',
-            #     'dt': f'{dt*1000:.2f}ms',
-            #     'ppl': f'{perplexity:.1f}',
-            #     'muon_lr': f'{optimizers[0].param_groups[0]["lr"]:.2e}',
-            #     'adamw_lr': f'{optimizers[1].param_groups[0]["lr"]:.2e}'
-            # })
+            pbar.set_postfix({
+                'loss': f'{loss_accum.item():.4f}',
+                'dt': f'{dt*1000:.2f}ms',
+                'ppl': f'{perplexity:.1f}',
+                'muon_lr': f'{optimizers[0].param_groups[0]["lr"]:.2e}',
+                'adamw_lr': f'{optimizers[1].param_groups[0]["lr"]:.2e}'
+            })
         # if step % config.eval_every == 0 and step > 0 and is_master:
         #     model.eval()
         #     eval_metrics = evaluate_model(model, val_loader, config)
@@ -634,10 +634,8 @@ for step in range(config.max_steps):
         #     if eval_metrics['val_loss'] < best_val_loss:
         #         best_val_loss = eval_metrics['val_loss']
 
-    # if step % 50 == 0 and is_master:
-    #     pbar.update(50)
-    # if step % 50 == 0 and is_master:
-    #     pbar.update(50)
+    if step % 5 == 0 and is_master:
+        pbar.update(5)
 
 if ddp:
     dist.barrier()
@@ -649,8 +647,7 @@ if ddp:
 
 # Final evaluation
 if is_master:
-    # pbar.close()
-    # pbar.close()
+    pbar.close()
     training_time = time.time() - start_time
     print(f"   Training completed in {training_time:.1f} seconds")
     final_eval = None
