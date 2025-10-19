@@ -80,7 +80,14 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = model.to(device)
 
-    model_compiled  = torch.compile(model) 
+    model_compiled  = torch.compile(
+      model,
+      dynamic=False,
+      # mode='reduce-overhead',
+      # fullgraph=False,
+      # disable=['conv_bn_fusion'],
+      # disable=['triton_cudagraphs']
+    )
 
     total_params = sum(p.numel() for p in model.parameters())
     print(f"   Total parameters: {total_params:,}")

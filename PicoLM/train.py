@@ -32,9 +32,19 @@ def main():
     # Train/val split
     val_size = len(dataset) // 10
     train_size = len(dataset) - val_size
+
     train_dataset, val_dataset = torch.utils.data.random_split(
         dataset, [train_size, val_size], generator=torch.Generator().manual_seed(1337)
     )
+
+    # train_dataset = torch.utils.data.Subset(
+    # dataset,
+    # range(train_size),
+    # )
+    # val_dataset = torch.utils.data.Subset(
+    #     dataset,
+    #     range(val_size),
+    # )
     
     train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=config.batch_size, shuffle=False)
