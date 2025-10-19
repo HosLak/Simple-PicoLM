@@ -14,7 +14,6 @@ def main():
     if torch.cuda.is_available():
         print(f"GPU: {torch.cuda.get_device_name()}")
         print(f"Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
-
     # Set seed
     set_seed(1337)
 

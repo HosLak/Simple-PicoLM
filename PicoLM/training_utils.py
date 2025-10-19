@@ -27,7 +27,11 @@ def evaluate_model(model: nn.Module, val_loader: DataLoader, config: ModelConfig
             x, y = x.to(device), y.to(device)
 
             with autocast(enabled=config.use_amp):
-                logits = model(x)
+                # DataParallel
+                if hasattr(model, 'module'):
+                    logits = model.module(x)
+                else:
+                    logits = model(x)
                 loss = F.cross_entropy(logits.view(-1, config.vocab_size), y.view(-1))
 
             total_loss += loss.item() * y.numel()
@@ -67,7 +71,10 @@ def setup_muon_optimizer(model: nn.Module, config: ModelConfig):
 
 def save_model(model, filepath="PicoLMModel.pt"):
     """Save only model weights (for inference)"""
-    torch.save(model.state_dict(), filepath)
+    if hasattr(model, 'module'):
+        torch.save(model.module.state_dict(), filepath)
+    else:
+        torch.save(model.state_dict(), filepath)
     print(f" Model weights saved to {filepath}")
 
 def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataLoader):
@@ -98,9 +105,10 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
     # Learning rate schedule
     schedulers = []
     for optimizer in optimizers:
-        warmup_steps = int(config.max_steps * 0.06)
-        milestone1 = int(config.max_steps * 0.8)
-        milestone2 = int(config.max_steps * 0.9)
+        effective_max_steps = config.max_steps // config.gradient_accumulation_steps
+        warmup_steps = int(effective_max_steps * 0.06)
+        milestone1 = int(effective_max_steps * 0.8)
+        milestone2 = int(effective_max_steps * 0.9)
         
         def lr_lambda(step):
             if step < warmup_steps:

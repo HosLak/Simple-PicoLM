@@ -16,13 +16,11 @@ However, simple-PicoLM also performs well in general tasks like everyday chats o
 ## Features
 - **Efficient Transformer Architecture**: Optimized for fast training.
 - **Gradient Stabilization**: Prevents exploding gradients.
-- **Configurable Context Length**: Supports long-form reasoning.
 - **Multi-GPU & Distributed Training**: Scale training across multiple devices.
 - **Automatic Mixed Precision (AMP)**: Memory-efficient training.
 - **Built-in Evaluation Metrics**: Loss, perplexity, accuracy.
 - **Modular Code Structure**: Easy experimentation and extension.
 - **Optimizer Flexibility**: Supports AdamW and Muon.
-- **Lightweight Inference**: Can run efficiently on Colab T4 GPU.
 - **Open-Source**: Base code available on GitHub, with MIT license.
 
 ## Architecture
@@ -50,21 +48,17 @@ However, simple-PicoLM also performs well in general tasks like everyday chats o
 
 Training Results
 
-Using a free Google Colab T4 runtime and only 2 minutes 24 seconds of training, the following result was achieved:
+Using a free Google Colab T4 runtime and only 1 minutes 32 seconds of training, the following result was achieved:
 
 Prompt: ```Once upon a time```
 
-Model Output (trained 2m24s on T4):
+Model Output (trained 1m32s on T4):
 ```
-Once upon a time, there was a little girl named Lucy. She had a very special wand that she loved to wear pretty things. One day, the garden became very gloomy in her garden and it was very cold, so she decided to go inside.
-
-When they arrived home, Lucy showed her a bottle of perfume, some of water and leaves. The plant was so shiny and delicious! It smelled like an aeroplane, but couldn't see it anywhere. Lucy said it would be okay.
-
-At first, Lucy looked for something else to eat for the melon, but it couldn't find the flower for dinner again. It was too sweet, and it started to feel its way to get more confused.
-
-At the end, Lucy's mom asked
+Once upon a time, there was a little girl named Lily. She loved to play outside and explore the world around her. One day, she found an old box in her yard. It was so pretty that it looked like a real flower.
+Lily opened the box and saw all of different things. "What are you doing?" she asked. Her mom told her about all the toys. So, Lily said she would use the magic wand and put them in the garden. Lily was happy to see her new toy inside.
+From then on, Lily loved going to the park every day. She always had lots of fun adventures together and playing with her friends. The end.
 ```
-**Analysis**: The model already produces fluent grammar and some coherent story structure after a very short training run - impressive for 2m24s. However, the output clearly shows hallucination/nonsense (weird facts, repeated/confused phrases). Two main causes are identified:
+**Analysis**: The model already produces fluent grammar and some coherent story structure after a very short training run - impressive for 1m32s. However, the output clearly shows hallucination/nonsense (weird facts, repeated/confused phrases). Two main causes are identified:
 
 - **Too little training time**: The short training duration limits the model's ability to learn complex patterns.
 - **Too-small dataset**: The limited dataset size restricts the model's exposure to diverse language patterns.
