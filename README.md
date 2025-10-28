@@ -1,6 +1,8 @@
 # Simple-PicoLM
 Developing more efficient Transformer architectures for language tasks, aiming to drastically reduce model size while preserving high performance.
 
+> **⚠️ Proof of Concept**: This project is currently in the idea/prototype stage and requires further development for production use.
+
 # About PicoLM
 PicoLM is the main project focused on creating a highly efficient, compact language model that rivals the performance of larger models like ChatGPT, Gemini, and Grok, but with significantly reduced size and resource requirements. It incorporates advanced architectural innovations, proprietary optimizations, and comprehensive features tailored for both commercial and high-performance applications. Please note that PicoLM is still under active development and will be made available soon. In the meantime, simple-PicoLM serves as a lightweight, open-source version of PicoLM, sharing foundational code and concepts while omitting certain proprietary elements to protect intellectual property. This allows the community to experiment with and build upon the core ideas without accessing the full, commercial-grade implementation.
 
