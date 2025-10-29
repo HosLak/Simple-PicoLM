@@ -8,29 +8,50 @@ def train_tokenizer(data):
     tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=False)
     tokenizer.decoder = decoders.ByteLevel()
 
-    special_tokens = ["<pad>", "<unk>", "<story_start>", "<story_end>"]
+    SPECIAL_TOKENS = [
+        "<|endoftext|>",
+        "<|im_start|>",
+        "<|im_end|>",
+        "system",
+        "user",
+        "assistant"
+    ]
 
     trainer = trainers.BpeTrainer(
-        vocab_size=24576,
-        min_frequency=2,
-        special_tokens=special_tokens
+        vocab_size=2**15,
+        min_frequency=1,
+        special_tokens=SPECIAL_TOKENS
     )
 
     tokenizer.train_from_iterator(data['text'], trainer=trainer)
 
     tokenizer.post_processor = processors.TemplateProcessing(
-        single="<story_start> $A <story_end>",
-        pair="<story_start> $A <story_end> $B <story_end>",
-        special_tokens=[
-            ("<pad>", tokenizer.token_to_id("<pad>")),
-            ("<unk>", tokenizer.token_to_id("<unk>")),
-            ("<story_start>", tokenizer.token_to_id("<story_start>")),
-            ("<story_end>", tokenizer.token_to_id("<story_end>")),
-        ],
+        single="<|im_start|>$A<|im_end|>", 
+        pair="<|im_start|>$A<|im_end|>\n<|im_start|>$B<|im_end|>", 
+        special_tokens={
+            "<|im_start|>": (
+                "<|im_start|>",
+                {
+                    "type": "im_start",
+                    "value": "$A", 
+                    "lstrip": False,
+                    "add_prefix_space": False
+                }
+            ),
+            "<|im_end|>": (
+                "<|im_end|>",
+                {
+                    "type": "im_end",
+                    "value": "",
+                    "lstrip": True,
+                    "add_prefix_space": False
+                }
+            ),
+        },
     )
 
-    tokenizer.enable_padding(direction="right", pad_token="<pad>")
-    tokenizer.enable_truncation(max_length=2048, direction="right")
+    chat_template = """{% for message in messages %}{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}""".strip()
+    tokenizer.chat_template = chat_template
 
     tokenizer.save("tokenizer.json")
 
