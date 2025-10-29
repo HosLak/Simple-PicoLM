@@ -18,7 +18,6 @@ However, simple-PicoLM also performs well in general tasks like everyday chats o
 ## Features
 - **Efficient Transformer Architecture**: Optimized for fast training.
 - **Gradient Stabilization**: Prevents exploding gradients.
-- **Multi-GPU & Distributed Training**: Scale training across multiple devices.
 - **Automatic Mixed Precision (AMP)**: Memory-efficient training.
 - **Built-in Evaluation Metrics**: Loss, perplexity, accuracy.
 - **Modular Code Structure**: Easy experimentation and extension.
@@ -92,6 +91,7 @@ Once the architecture is finalized, I plan to scale up to the following hyperpar
 **We are actively working on improving the Simple-PicoLM model.** Planned enhancements include:
 
 - **Stepwise Think Fine-Tuning**: The model will be fine-tuned using the Stepwise Think format to enhance reasoning capabilities and achieve faster, high-quality responses. For more details on this approach, see [Stepwise Think: Revolutionizing Chain-of-Thought for Faster AI Responses Without Sacrificing Quality](https://medium.com/@hosseinlack123/stepwise-think-revolutionizing-chain-of-thought-for-faster-ai-responses-without-sacrificing-d81e140789b6).
+- **Multi-GPU & Distributed Training**: Scale training across multiple devices.
 
 **Additional plans will be added as the project evolves.**
 
