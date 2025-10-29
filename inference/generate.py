@@ -19,12 +19,9 @@ class TextGenerator:
         """Initialize the text generator with a trained model"""
         self.device = device if device else ('cuda' if torch.cuda.is_available() else 'cpu')
         
-        # Load tokenizer
-        self.tokenizer = AutoTokenizer.from_pretrained("Hosseinlack123/PicoLM-tokenizer")
-        self.tokenizer.eos_token = '<story_end>'
-        
         # Initialize config and model
         self.config = ModelConfig()
+        self.tokenizer = AutoTokenizer.from_pretrained(self.config.tokenizer_name)
         self.config.vocab_size = self.tokenizer.vocab_size
         
         # Load model
@@ -32,8 +29,8 @@ class TextGenerator:
         self.model.load_state_dict(torch.load(model_path, map_location=self.device))
         self.model.eval()
         
-        print(f"✅ Model loaded from {model_path}")
-        print(f"🔧 Using device: {self.device}")
+        print(f"Model loaded from {model_path}")
+        print(f"Using device: {self.device}")
     
     @torch.no_grad()
     def generate(self, 
@@ -55,10 +52,10 @@ class TextGenerator:
             repetition_penalty: Penalty for repeating tokens
         """
         
-        prompt = "Once upon a time" if prompt is not None else prompt
+        prompt = " " if prompt is not None else prompt
         
         # Tokenize prompt
-        input_ids = self.tokenizer.encode(prompt, add_special_tokens=False, return_tensors='pt')
+        input_ids = self.tokenizer.encode(prompt, add_special_tokens=False, return_tensors='pt').ids
         input_ids = input_ids.to(self.device)
         
         # Keep track of generated tokens for repetition penalty
@@ -116,12 +113,12 @@ class TextGenerator:
         print("Type 'quit' to exit\n")
         
         while True:
-            prompt = input("📝 Enter your prompt: ")
+            prompt = input("Enter your prompt: ")
             if prompt.lower() == 'quit':
-                print("👋 Goodbye!")
+                print("Goodbye!")
                 break
             
-            print("\n🔄 Generating...\n")
+            print("\nGenerating...\n")
             
             generated = self.generate(
                 prompt=prompt,
