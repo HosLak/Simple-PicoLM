@@ -30,19 +30,18 @@ def load_and_cache_data(config: ModelConfig, cache_dir: str = "data_cache"):
         with open(cache_file, 'rb') as f:
             cached_data = pickle.load(f)
 
-        texts = cached_data['texts']
-        tokenizer = cached_data['tokenizer']
         tokens = cached_data['tokens']
-        config.vocab_size = tokenizer.vocab_size
 
-        print(f"Loaded {len(texts)} Stories, {len(tokens):,} tokens from cache")
-        return texts, tokenizer, tokens
+        tokenizer = AutoTokenizer.from_pretrained(config.tokenizer_name, trust_remote_code=True)
+        config.vocab_size = tokenizer.get_vocab_size()
+
+        print(f"Loaded {len(tokens):,} tokens from cache")
+        return tokens
 
     print(f"Processing new data (will cache for future use)")
 
     # Load tokenizer
-    tokenizer = AutoTokenizer.from_pretrained("Hosseinlack123/PicoLM-tokenizer")
-    tokenizer.eos_token = '<story_end>'
+    tokenizer = AutoTokenizer.from_pretrained(config.tokenizer_name, trust_remote_code=True)
 
     # Load dataset
     dataset = load_dataset(config.dataset_name)['train']
@@ -57,7 +56,7 @@ def load_and_cache_data(config: ModelConfig, cache_dir: str = "data_cache"):
     
     all_tokens = []
     for text in tqdm(texts, desc="Tokenizing"):
-        tokens = tokenizer.encode(text + tokenizer.eos_token, add_special_tokens=False)
+        tokens = tokenizer.encode(text + tokenizer.eos_token, add_special_tokens=False).ids
         all_tokens.extend(tokens)
         
         if max_tokens != -1 and len(all_tokens) >= max_tokens:
@@ -65,15 +64,15 @@ def load_and_cache_data(config: ModelConfig, cache_dir: str = "data_cache"):
 
     all_tokens = all_tokens[:max_tokens]
     print(f"Using {len(all_tokens):,} tokens")
-    config.vocab_size = tokenizer.vocab_size
+    config.vocab_size = tokenizer.get_vocab_size()
 
     # Cache the processed data
-    cached_data = {'texts': texts, 'tokenizer': tokenizer, 'tokens': all_tokens}
+    cached_data = {'tokens': all_tokens}
     with open(cache_file, 'wb') as f:
         pickle.dump(cached_data, f)
 
     print(f"Cached data to {cache_file}")
-    return texts, tokenizer, all_tokens
+    return all_tokens
 
 class TextTokenDataset(Dataset):
     def __init__(self, tokens: List[int], seq_len: int = 256, stride: int = 128):

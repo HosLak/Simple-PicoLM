@@ -25,11 +25,11 @@ def main():
     print(f"   Data: {config.max_tokens:,} tokens, seq_len {config.max_seq_len}")
 
     # Load data
-    texts, tokenizer, tokens = load_and_cache_data(config)
+    tokens = load_and_cache_data(config)
     dataset = TextTokenDataset(tokens, config.max_seq_len, config.stride)
     
     # Train/val split
-    val_size = len(dataset) // 10
+    val_size = len(dataset) // 20
     train_size = len(dataset) - val_size
 
     train_dataset, val_dataset = torch.utils.data.random_split(

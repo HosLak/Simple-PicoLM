@@ -51,7 +51,9 @@ def train_tokenizer(data):
     )
 
     chat_template = """{% for message in messages %}{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}""".strip()
+    
     tokenizer.chat_template = chat_template
+    tokenizer.eos_token = "<|endoftext|>"
 
     tokenizer.save("tokenizer.json")
 
