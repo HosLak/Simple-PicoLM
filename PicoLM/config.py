@@ -25,7 +25,8 @@ class ModelConfig:
     multiple_of: int = 128
     stride: int = field(init=False)
     max_tokens: int = -1 # -1 if you want to ues entire of dataset
-    dataset_name: str = "Hosseinlack123/PicoLM-dataset"
+    dataset_name: str = ""
+    tokenizer_name: str = ""
 
     # Evaluation
     eval_every: int = 150
@@ -49,6 +50,9 @@ class ModelConfig:
             self.stride = self.max_seq_len // 2
         else:
             self.stride = self.max_seq_len
+
+        if self.tokenizer_name == "":
+            self.tokenizer_name = "./tokenizer.json"
         
         # Set d_ff to 4 times d_model
         self.d_ff = int(self.multiple_of * int((((self.d_model * 4 * 2 / 3) * 1.3) + self.multiple_of + 1) // self.multiple_of))
