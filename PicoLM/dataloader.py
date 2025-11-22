@@ -1,48 +1,85 @@
+import os
+import glob
+import time
 from collections import deque
-
 import torch
+import pyarrow.parquet as pq
 
-from nanochat.dataset import parquets_iter_batched
-from PicoLM.config import tokenizer
+class StreamingDataLoader:
+    def __init__(self, data_dir, tokenizer, batch_size, block_size, split="train", device="cuda"):
+        self.data_dir = data_dir
+        self.tokenizer = tokenizer
+        self.batch_size = batch_size
+        self.block_size = block_size 
+        self.device = device
+        
+        all_files = sorted(glob.glob(os.path.join(data_dir, "*.parquet")))
+        
+        if split == "train":
+            self.files = all_files[:-1]
+        else:
+            self.files = all_files[-1:]
+            
+        assert len(self.files) > 0, f"No parquet files found in {data_dir}"
+        print(f"Initialized {split} loader with {len(self.files)} files.")
 
-def tokenizing_distributed_data_loader(B, T, split, tokenizer_threads=4, tokenizer_batch_size=128):
-    """Stream pretraining text from parquet files, tokenize, yield training batches."""
-    assert split in ["train", "val"], "split must be 'train' or 'val'"
+    def _document_generator(self, resume_state=None):
+        pq_idx = 0
+        start_rg_idx = 0
+        
+        if resume_state:
+            pq_idx = resume_state.get("pq_idx", 0)
+            start_rg_idx = resume_state.get("rg_idx", 0)
 
-    needed_tokens = B * T + 1 # +1 is because we also need the target at the last token
-    # get the tokenizer and the bos token
-    tokenizer = get_tokenizer()
-    bos_token = tokenizer.get_bos_token_id()
-    # scratch buffer holds the tokens for one iteration
-    token_buffer = deque() # we stream tokens on the right and pop from the left
-    scratch = torch.empty(needed_tokens, dtype=torch.int64, pin_memory=True)
+        while True: 
+            if pq_idx >= len(self.files):
+                pq_idx = 0 
 
-    # infinite iterator over document batches
-    def document_batches():
+            filepath = self.files[pq_idx]
+            pf = pq.ParquetFile(filepath)
+            
+            rg_idx = start_rg_idx if start_rg_idx is not None else 0
+            start_rg_idx = None 
+
+            while rg_idx < pf.num_row_groups:
+                table = pf.read_row_group(rg_idx)
+                text_batch = table.column('text').to_pylist()
+                
+                yield text_batch, (pq_idx, rg_idx)
+                
+                rg_idx += 1 
+            
+            pq_idx += 1 
+
+    def __iter__(self):
+        token_buffer = deque()
+        needed_tokens = self.batch_size * self.block_size + 1 
+        
+        bos_token = getattr(self.tokenizer, "bos_token_id", None)
+        
+        generator = self._document_generator()
+        
         while True:
-            # batch will iterate in group size of the parquet files, usually e.g. 1024 rows
-            for batch in parquets_iter_batched(split=split):
-                # for the tokenizer we might want to go in usually smaller batches, e.g. 128 rows
-                for i in range(0, len(batch), tokenizer_batch_size):
-                    yield batch[i:i+tokenizer_batch_size]
-    batches = document_batches()
-
-    batch_index = 0
-    while True:
-        # Accumulate enough tokens for one iteration before yielding.
-        while len(token_buffer) < needed_tokens:
-            doc_batch = next(batches)
-            token_lists = tokenizer.encode(doc_batch, prepend=bos_token, num_threads=tokenizer_threads)
-            for tokens in token_lists:
-                token_buffer.extend(tokens)
-            batch_index += 1
-        # Move tokens from the deque into the scratch buffer
-        for i in range(needed_tokens):
-            scratch[i] = token_buffer.popleft()
-        # Create the inputs/targets as 1D tensors
-        inputs_cpu = scratch[:-1].to(dtype=torch.int32)
-        targets_cpu = scratch[1:]
-        # Reshape to 2D and move to GPU async
-        inputs = inputs_cpu.view(B, T).to(device="cuda", dtype=torch.int32, non_blocking=True)
-        targets = targets_cpu.view(B, T).to(device="cuda", dtype=torch.int64, non_blocking=True)
-        yield inputs, targets
+            while len(token_buffer) < needed_tokens:
+                try:
+                    text_batch, (pq_idx, rg_idx) = next(generator)
+                except StopIteration:
+                    break 
+                
+                for text in text_batch:
+                    tokens = self.tokenizer.encode(text, add_special_tokens=True)
+                    token_buffer.extend(tokens)
+            
+            if len(token_buffer) >= needed_tokens:
+                batch_tokens = [token_buffer.popleft() for _ in range(needed_tokens)]
+                
+                data_tensor = torch.tensor(batch_tokens, dtype=torch.long).pin_memory()
+                
+                x = data_tensor[:-1].view(self.batch_size, self.block_size)
+                y = data_tensor[1:].view(self.batch_size, self.block_size)
+                
+                if self.device == "cuda":
+                    x = x.to(self.device, non_blocking=True)
+                    y = y.to(self.device, non_blocking=True)
+                
+                yield x, y, {"pq_idx": pq_idx, "rg_idx": rg_idx}
