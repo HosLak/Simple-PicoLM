@@ -2,14 +2,18 @@ import torch
 from torch.utils.data import DataLoader
 import time
 import warnings
+from transformers import AutoTokenizer
+from .dataloader import StreamingDataLoader
+from .create_shard import start_sharding_process
 warnings.filterwarnings('ignore')
 
 from .config import ModelConfig
-from .data_utils import set_seed, load_and_cache_data, TextTokenDataset
+from .data_utils import set_seed
 from .training_utils import train_model, save_model
 
 def main():
     # Check system
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
     print(f"Device: {'CUDA' if torch.cuda.is_available() else 'CPU'}")
     if torch.cuda.is_available():
         print(f"GPU: {torch.cuda.get_device_name()}")
@@ -24,31 +28,34 @@ def main():
     print(f"   Training: {config.max_steps} steps, batch size {config.batch_size}")
     print(f"   Data: {config.max_tokens:,} tokens, seq_len {config.max_seq_len}")
 
-    # Load data
-    tokens = load_and_cache_data(config)
-    dataset = TextTokenDataset(tokens, config.max_seq_len, config.stride)
     
-    # Train/val split
-    val_size = len(dataset) // 20
-    train_size = len(dataset) - val_size
+    tokenizer = AutoTokenizer.from_pretrained(config.tokenizer_name)
+    # Load data
+    # tokens = load_and_cache_data(config)
+    # dataset = TextTokenDataset(tokens, config.max_seq_len, config.stride)
 
-    train_dataset, val_dataset = torch.utils.data.random_split(
-        dataset, [train_size, val_size], generator=torch.Generator().manual_seed(1337)
+    # Create shards if not exist
+    start_sharding_process()
+
+    train_loader = StreamingDataLoader(
+      data_dir=config.dataset_cache_path,
+      tokenizer=tokenizer,
+      batch_size=config.batch_size,
+      block_size=config.max_seq_len,
+      split='train',
+      device=device,
     )
 
-    # train_dataset = torch.utils.data.Subset(
-    # dataset,
-    # range(train_size),
-    # )
-    # val_dataset = torch.utils.data.Subset(
-    #     dataset,
-    #     range(val_size),
-    # )
-    
-    train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=config.batch_size, shuffle=False)
+    val_loader = StreamingDataLoader(
+        data_dir=config.dataset_cache_path,
+        tokenizer=tokenizer,
+        batch_size=config.batch_size,
+        block_size=config.max_seq_len,
+        split='valid',
+        device=device,
+    )
 
-    print(f"Dataset: {len(train_dataset)} train, {len(val_dataset)} val samples")
+    # print(f"Dataset: {len(train_dataset)} train, {len(val_dataset)} val samples")
 
     # Train model
     start_time = time.time()

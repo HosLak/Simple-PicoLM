@@ -4,14 +4,15 @@ from typing import Optional
 @dataclass
 class ModelConfig:
     # Model architecture
-    d_model: int = 256
+    d_model: int = 384
     n_heads: int = 4
     n_kv_heads: int = field(init=False)
-    n_layers: int = 8
+    n_layers: int = 12
     
     d_ff: int = field(init=False)
-    batch_size: int = 16
-    max_steps: int = 1500 # max_tokens // (batch_size * gradient_accumulation_steps * max_seq_len) = 1 epoch
+    multiple_of: int = 128
+    batch_size: int = 32
+    max_steps: int = 800 # max_tokens // (batch_size * gradient_accumulation_steps * max_seq_len) = 1 epoch
     rope_theta: float = 100000.0
 
     # Training parameters
@@ -21,12 +22,12 @@ class ModelConfig:
     adamw_betas: tuple = (0.9, 0.95)
 
     # Data parameters
-    max_seq_len: int = 256
-    multiple_of: int = 128
+    max_seq_len: int = 384
     stride: int = field(init=False)
-    max_tokens: int = -1 # -1 if you want to ues entire of dataset
-    dataset_name: str = ""
-    tokenizer_name: str = ""
+    max_tokens: int = 100_000_000
+    dataset_name: str = "roneneldan/TinyStories"
+    dataset_cache_path: str = "PicoLM/dataset"
+    tokenizer_name: str = "roneneldan/TinyStories-1M"
 
     # Evaluation
     eval_every: int = 150
@@ -39,7 +40,7 @@ class ModelConfig:
 
     # Technical
     use_amp: bool = True
-    vocab_size: Optional[int] = None
+    vocab_size: Optional[int] = 50257
 
     def __post_init__(self):
         assert self.d_model % self.n_heads == 0, "d_model must be divisible by n_heads"

@@ -19,12 +19,15 @@ def evaluate_model(model: nn.Module, val_loader: DataLoader, config: ModelConfig
     total_correct = 0
 
     device = next(model.parameters()).device
+    valid_iter_loader = iter(val_loader)
 
     with torch.no_grad():
-        for i, (x, y) in enumerate(val_loader):
-            if i >= config.eval_steps:
+        # for i, (x, y) in enumerate(val_loader):
+        step = 0
+        while step < config.eval_steps:
+            x, y, state = next(valid_iter_loader)
+            if step >= config.eval_steps:
                 break
-            x, y = x.to(device), y.to(device)
 
             with autocast(enabled=config.use_amp):
                 # DataParallel
@@ -33,12 +36,13 @@ def evaluate_model(model: nn.Module, val_loader: DataLoader, config: ModelConfig
                 else:
                     logits = model(x)
                 loss = F.cross_entropy(logits.view(-1, config.vocab_size), y.view(-1))
-
+        
             total_loss += loss.item() * y.numel()
             total_tokens += y.numel()
 
             predictions = logits.argmax(dim=-1)
             total_correct += (predictions == y).sum().item()
+            step += 1
 
     avg_loss = total_loss / total_tokens
     accuracy = total_correct / total_tokens
@@ -150,82 +154,84 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
 
     pbar = tqdm(total=config.max_steps, desc="Training")
 
+    train_iter_loader = iter(train_loader)
     while step < config.max_steps:
-        for batch_idx, (x, y) in enumerate(train_loader):
-            if step >= config.max_steps:
-                break
+        try:
+            x, y, state = next(train_iter_loader)
+        except StopIteration:
+            train_iter_loader = iter(train_loader)
+            x, y, state = next(train_iter_loader)
+    
+        # x, y = x.to(device), y.to(device)
         
-            x, y = x.to(device), y.to(device)
-
-            # Forward pass with gradient accumulation
-            if config.use_amp:
-                with autocast():
-                    logits = model_compiled(x)
-                    loss = F.cross_entropy(logits.view(-1, config.vocab_size), y.view(-1))
-                    loss = loss / config.gradient_accumulation_steps
-                scaler.scale(loss).backward()
-            else:
+        # Forward pass with gradient accumulation
+        if config.use_amp:
+            with autocast():
                 logits = model_compiled(x)
                 loss = F.cross_entropy(logits.view(-1, config.vocab_size), y.view(-1))
                 loss = loss / config.gradient_accumulation_steps
-                loss.backward()
+            scaler.scale(loss).backward()
+        else:
+            logits = model_compiled(x)
+            loss = F.cross_entropy(logits.view(-1, config.vocab_size), y.view(-1))
+            loss = loss / config.gradient_accumulation_steps
+            loss.backward()
 
-            # Optimizer step after accumulation
-            if (step + 1) % config.gradient_accumulation_steps == 0:
-                if config.use_amp:
-                    for optimizer in optimizers:
-                        scaler.unscale_(optimizer)
-                    grad_norm = torch.nn.utils.clip_grad_norm_(model_compiled.parameters(), config.grad_clip)
+        # Optimizer step after accumulation
+        if (step + 1) % config.gradient_accumulation_steps == 0:
+            if config.use_amp:
+                for optimizer in optimizers:
+                    scaler.unscale_(optimizer)
+                grad_norm = torch.nn.utils.clip_grad_norm_(model_compiled.parameters(), config.grad_clip)
 
-                    for optimizer in optimizers:
-                        scaler.step(optimizer)
-                        optimizer.zero_grad()
-                    for scheduler in schedulers:
-                        scheduler.step()
-                    scaler.update()
-                else:
-                    grad_norm = torch.nn.utils.clip_grad_norm_(model_compiled.parameters(), config.grad_clip)
-                    for optimizer in optimizers:
-                        optimizer.step()
-                        optimizer.zero_grad()
-                    for scheduler in schedulers:
-                        scheduler.step()
+                for optimizer in optimizers:
+                    scaler.step(optimizer)
+                    optimizer.zero_grad(set_to_none=True)
+                for scheduler in schedulers:
+                    scheduler.step()
+                scaler.update()
+            else:
+                grad_norm = torch.nn.utils.clip_grad_norm_(model_compiled.parameters(), config.grad_clip)
+                for optimizer in optimizers:
+                    optimizer.step()
+                    optimizer.zero_grad(set_to_none=True)
+                for scheduler in schedulers:
+                    scheduler.step()
 
-            # Logging
-            if step % 100 == 0:
-                with torch.no_grad():
-                    predictions = logits.argmax(dim=-1)
-                    accuracy = (predictions == y).float().mean().item()
-                    current_loss = loss.item() * config.gradient_accumulation_steps
-                    perplexity = math.exp(min(current_loss, 20))
+        # Logging
+        if step % 20 == 0:
+            with torch.no_grad():
+                predictions = logits.argmax(dim=-1)
+                accuracy = (predictions == y).float().mean().item()
+                current_loss = loss.item() * config.gradient_accumulation_steps
+                perplexity = math.exp(min(current_loss, 20))
 
-                pbar.set_postfix({
-                    'loss': f'{current_loss:.4f}',
-                    'acc': f'{accuracy:.3f}',
-                    'ppl': f'{perplexity:.1f}',
-                    'muon_lr': f'{optimizers[0].param_groups[0]["lr"]:.2e}',
-                    'adamw_lr': f'{optimizers[1].param_groups[0]["lr"]:.2e}'
-                })
+            pbar.set_postfix({
+                'loss': f'{current_loss:.4f}',
+                'acc': f'{accuracy:.3f}',
+                'ppl': f'{perplexity:.1f}',
+                'muon_lr': f'{optimizers[0].param_groups[0]["lr"]:.2e}',
+                'adamw_lr': f'{optimizers[1].param_groups[0]["lr"]:.2e}'
+            })
+            pbar.update(20)
 
-            # Evaluation
-            if step % config.eval_every == 0 and step > 0:
-                model_compiled.eval()
-                eval_metrics = evaluate_model(model_compiled, val_loader, config)
-                val_losses.append(eval_metrics['val_loss'])
-                train_eval_metrics = evaluate_model(model_compiled, train_loader, config)
-                train_losses.append(train_eval_metrics['val_loss'])
-                print(f"\nStep {step}: Val Loss: {eval_metrics['val_loss']:.4f}, "
-                      f"Train Loss: {train_eval_metrics['val_loss']:.4f}, "
-                      f"Val Acc: {eval_metrics['val_accuracy']:.4f}, "
-                      f"Val PPL: {eval_metrics['val_perplexity']:.2f}")
-                model_compiled.train()
+        # Evaluation
+        if step % config.eval_every == 0 and step > 0:
+            model_compiled.eval()
+            eval_metrics = evaluate_model(model_compiled, val_loader, config)
+            val_losses.append(eval_metrics['val_loss'])
+            train_eval_metrics = evaluate_model(model_compiled, train_loader, config)
+            train_losses.append(train_eval_metrics['val_loss'])
+            print(f"\nStep {step}: Val Loss: {eval_metrics['val_loss']:.4f}, "
+                    f"Train Loss: {train_eval_metrics['val_loss']:.4f}, "
+                    f"Val Acc: {eval_metrics['val_accuracy']:.4f}, "
+                    f"Val PPL: {eval_metrics['val_perplexity']:.2f}")
+            model_compiled.train()
 
-                if eval_metrics['val_loss'] < best_val_loss:
-                    best_val_loss = eval_metrics['val_loss']
+            if eval_metrics['val_loss'] < best_val_loss:
+                best_val_loss = eval_metrics['val_loss']
 
-            step += 1
-            if step % 50 == 0:
-                pbar.update(50)
+        step += 1
 
     pbar.close()
 

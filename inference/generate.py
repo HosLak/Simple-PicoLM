@@ -35,8 +35,8 @@ class TextGenerator:
     @torch.no_grad()
     def generate(self, 
                  prompt: str, 
-                 max_length: int = 100,
-                 temperature: float = 0.8,
+                 max_length: int = 128,
+                 temperature: float = 0.3,
                  top_k: int = 40,
                  top_p: float = 0.9,
                  repetition_penalty: float = 1.1):
@@ -52,10 +52,8 @@ class TextGenerator:
             repetition_penalty: Penalty for repeating tokens
         """
         
-        prompt = " " if prompt is not None else prompt
-        
         # Tokenize prompt
-        input_ids = self.tokenizer.encode(prompt, add_special_tokens=False, return_tensors='pt').ids
+        input_ids = self.tokenizer.encode(prompt, add_special_tokens=False, return_tensors='pt')
         input_ids = input_ids.to(self.device)
         
         # Keep track of generated tokens for repetition penalty
@@ -114,6 +112,7 @@ class TextGenerator:
         
         while True:
             prompt = input("Enter your prompt: ")
+            prompt = " " if prompt is None else prompt
             if prompt.lower() == 'quit':
                 print("Goodbye!")
                 break
