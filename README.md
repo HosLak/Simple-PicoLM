@@ -43,8 +43,8 @@ However, simple-PicoLM also performs well in general tasks like everyday chats o
 ## Training
 - **Muon Optimizer**: Orthogonalized momentum for efficient gradient updates.
 - **Automatic Mixed Precision (AMP)**: Reduces memory usage and speeds up training.
-- **Dataset**: Uses the [Hosseinlack123/PicoLM-dataset](https://huggingface.co/datasets/Hosseinlack123/PicoLM-dataset) for training.
-- **Tokenizer**: Employs a custom BPE tokenizer with a vocabulary size of 24,576 ([Hosseinlack123/PicoLM-tokenizer](https://huggingface.co/Hosseinlack123/PicoLM-tokenizer)).
+- **Dataset**: Uses the [roneneldan/TinyStories](https://huggingface.co/datasets/roneneldan/TinyStories) for training.
+- **Tokenizer**: Employs a custom BPE tokenizer with a vocabulary size of 50,257 ([roneneldan/TinyStories-1M](https://huggingface.co/roneneldan/TinyStories-1M)).
 
 Training Results
 
