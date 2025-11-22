@@ -71,12 +71,12 @@ Lily felt happy that she helped someone in need. From that day on, she knew that
 
 The model is currently configured with the following hyperparameters for testing purposes:
 
-- n_layers: 8
-- hidden_dim: 256
-- n_heads: 8 (head_dim: 32)
-- n_kv_heads: 2
-- vocab_size: 24,576
-- seq_len: 256
+- n_layers: 12
+- hidden_dim: 384
+- n_heads: 4 (head_dim: 96)
+- n_kv_heads: 1
+- vocab_size: 50,257
+- seq_len: 384
 
 **Note**: This is an experimental model designed to test and optimize the architecture's performance on a limited budget. For a deeper dive into the reasoning behind these hyperparameter choices and strategies for building efficient AI models, check out this article: [AI Unlocking Hyperparameter Secrets: Building Better AI Models on a Budget](https://medium.com/@hosseinlack123/aiunlocking-hyperparameter-secrets-building-better-ai-models-on-a-budget-60e25562b5e9)
 
@@ -84,7 +84,7 @@ Once the architecture is finalized, I plan to scale up to the following hyperpar
 
 - n_layers: 24
 - hidden_dim: 2048
-- n_heads: 32 (head_dim: 64)
+- n_heads: 16 (head_dim: 128)
 - n_kv_heads: 8
 - vocab_size: Approximately equivalent to GPT-2's vocabulary size
 - seq_len: Approximately 2048 (if increasing context length is feasible, otherwise likely to remain around 2048)
