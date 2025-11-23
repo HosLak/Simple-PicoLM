@@ -43,22 +43,26 @@ However, simple-PicoLM also performs well in general tasks like everyday chats o
 ## Training
 - **Muon Optimizer**: Orthogonalized momentum for efficient gradient updates.
 - **Automatic Mixed Precision (AMP)**: Reduces memory usage and speeds up training.
-- **Dataset**: Uses the [Hosseinlack123/PicoLM-dataset](https://huggingface.co/datasets/Hosseinlack123/PicoLM-dataset) for training.
-- **Tokenizer**: Employs a custom BPE tokenizer with a vocabulary size of 24,576 ([Hosseinlack123/PicoLM-tokenizer](https://huggingface.co/Hosseinlack123/PicoLM-tokenizer)).
+- **Dataset**: Uses the [roneneldan/TinyStories](https://huggingface.co/datasets/roneneldan/TinyStories) for training.
+- **Tokenizer**: Employs a custom BPE tokenizer with a vocabulary size of 50,257 ([roneneldan/TinyStories-1M](https://huggingface.co/roneneldan/TinyStories-1M)).
 
 Training Results
 
-Using a free Google Colab T4 runtime and only 1 minutes 32 seconds of training, the following result was achieved:
+Using a free Google Colab T4 runtime and only 16 minutes of training, the following result was achieved:
 
 Prompt: ```Once upon a time```
 
-Model Output (trained 1m32s on T4):
+Model Output (trained 16m on T4):
 ```
-Once upon a time, there was a little girl named Lily. She loved to play outside and explore the world around her. One day, she found an old box in her yard. It was so pretty that it looked like a real flower.
-Lily opened the box and saw all of different things. "What are you doing?" she asked. Her mom told her about all the toys. So, Lily said she would use the magic wand and put them in the garden. Lily was happy to see her new toy inside.
-From then on, Lily loved going to the park every day. She always had lots of fun adventures together and playing with her friends. The end.
+Once upon a time, there was a little girl named Lily. She loved to play outside and explore the world around her. One day, she went on a walk in the park with her mommy. They saw a big dog running towards them. 
+
+Lily asked her mommy if they could go. Her mommy said yes, but they were too scared to go near the dog. Suddenly, the dog ran after it and caught up to Lily. 
+
+Lily's mommy picked her up and gave her a treat. "Thank you for being so brave," she said. "You're welcome," her mommy replied. 
+
+Lily felt happy that she helped someone in need. From that day on, she knew that if she ever needed help, she could always count on her mommy and make sure she didn't have to worry about the dog.
 ```
-**Analysis**: The model already produces fluent grammar and some coherent story structure after a very short training run - impressive for 1m32s. However, the output clearly shows hallucination/nonsense (weird facts, repeated/confused phrases). Two main causes are identified:
+**Analysis**: The model already produces fluent grammar and some coherent story structure after a very short training run - impressive for 16m. However, the output clearly shows hallucination/nonsense (weird facts, repeated/confused phrases). Two main causes are identified:
 
 - **Too little training time**: The short training duration limits the model's ability to learn complex patterns.
 - **Too-small dataset**: The limited dataset size restricts the model's exposure to diverse language patterns.
@@ -67,12 +71,12 @@ From then on, Lily loved going to the park every day. She always had lots of fun
 
 The model is currently configured with the following hyperparameters for testing purposes:
 
-- n_layers: 8
-- hidden_dim: 256
-- n_heads: 8 (head_dim: 32)
-- n_kv_heads: 2
-- vocab_size: 24,576
-- seq_len: 256
+- n_layers: 12
+- hidden_dim: 384
+- n_heads: 4 (head_dim: 96)
+- n_kv_heads: 1
+- vocab_size: 50,257
+- seq_len: 384
 
 **Note**: This is an experimental model designed to test and optimize the architecture's performance on a limited budget. For a deeper dive into the reasoning behind these hyperparameter choices and strategies for building efficient AI models, check out this article: [AI Unlocking Hyperparameter Secrets: Building Better AI Models on a Budget](https://medium.com/@hosseinlack123/aiunlocking-hyperparameter-secrets-building-better-ai-models-on-a-budget-60e25562b5e9)
 
@@ -80,7 +84,7 @@ Once the architecture is finalized, I plan to scale up to the following hyperpar
 
 - n_layers: 24
 - hidden_dim: 2048
-- n_heads: 32 (head_dim: 64)
+- n_heads: 16 (head_dim: 128)
 - n_kv_heads: 8
 - vocab_size: Approximately equivalent to GPT-2's vocabulary size
 - seq_len: Approximately 2048 (if increasing context length is feasible, otherwise likely to remain around 2048)
