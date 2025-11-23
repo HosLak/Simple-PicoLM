@@ -20,8 +20,8 @@ def create_shards():
 
     os.makedirs(output_dir, exist_ok=True)
 
-    chars_per_shard = 5_000_000
-    row_group_size = 1024
+    chars_per_shard = config.chars_per_shard
+    row_group_size = config.row_group_size
     shard_docs = []
     shard_index = 0
     shard_characters = 0
