@@ -25,9 +25,9 @@ class ModelConfig:
     max_seq_len: int = 384
     stride: int = field(init=False) # not work!
     max_tokens: int = 100_000_000
-    dataset_name: str = "roneneldan/TinyStories"
+    dataset_name: str = "roneneldan/TinyStories" # HuggingFaceFW/fineweb
     dataset_cache_path: str = "PicoLM/dataset"
-    tokenizer_name: str = "roneneldan/TinyStories-1M"
+    tokenizer_name: str = "roneneldan/TinyStories-1M" # HuggingFaceTB/SmolLM-135M
 
     # Evaluation
     eval_every: int = 150
