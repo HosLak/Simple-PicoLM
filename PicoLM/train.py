@@ -24,9 +24,9 @@ def main():
     # Create config
     config = ModelConfig()
     print(f"\nModel Configuration:")
-    print(f"   Architecture: {config.d_model}d, {config.n_layers}L, {config.n_heads}H, {config.d_ff}ff")
-    print(f"   Training: {config.max_steps} steps, batch size {config.batch_size}")
-    print(f"   Data: {config.max_tokens:,} tokens, seq_len {config.max_seq_len}")
+    print(f"   Architecture: {config.d_model:,}d, {config.n_layers}L, {config.n_heads}H, {config.d_ff:,}ff")
+    print(f"   Training: {config.max_steps:,} steps, batch size {config.batch_size:,}")
+    print(f"   Data: {config.max_tokens:,} tokens, seq_len {config.max_seq_len:,}")
 
     
     tokenizer = AutoTokenizer.from_pretrained(config.tokenizer_name)
