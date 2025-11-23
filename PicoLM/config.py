@@ -12,18 +12,18 @@ class ModelConfig:
     d_ff: int = field(init=False)
     multiple_of: int = 128
     batch_size: int = 32
-    max_steps: int = 800 # max_tokens // (batch_size * gradient_accumulation_steps * max_seq_len) = 1 epoch
+    max_steps: int = 0 # max_tokens // (batch_size * gradient_accumulation_steps * max_seq_len) = 1 epoch
     rope_theta: float = 100000.0
 
     # Training parameters
-    gradient_accumulation_steps: int = 4 # 16 * 4 = 64
+    gradient_accumulation_steps: int = 4
     muon_lr: float = 1e-2
     adamw_lr: float = 2e-3
     adamw_betas: tuple = (0.9, 0.95)
 
     # Data parameters
     max_seq_len: int = 384
-    stride: int = field(init=False)
+    stride: int = field(init=False) # not work!
     max_tokens: int = 100_000_000
     dataset_name: str = "roneneldan/TinyStories"
     dataset_cache_path: str = "PicoLM/dataset"
@@ -51,6 +51,10 @@ class ModelConfig:
             self.stride = self.max_seq_len // 2
         else:
             self.stride = self.max_seq_len
+        
+        # set maxstep conditionally
+        if self.max_steps == 0:
+            self.max_steps = self.max_tokens // (self.gradient_accumulation_steps * self.batch_size * self.max_seq_len)
 
         if self.tokenizer_name == "":
             self.tokenizer_name = "./tokenizer.json"
