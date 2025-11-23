@@ -40,7 +40,7 @@ class ModelConfig:
 
     # Technical
     use_amp: bool = True
-    vocab_size: Optional[int] = 50257
+    vocab_size: Optional[int] = 50257 # 49152
 
     def __post_init__(self):
         assert self.d_model % self.n_heads == 0, "d_model must be divisible by n_heads"
