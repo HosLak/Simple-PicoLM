@@ -58,9 +58,6 @@ class ModelConfig:
         if self.max_steps == 0:
             self.max_steps = self.max_tokens // (self.gradient_accumulation_steps * self.batch_size * self.max_seq_len)
 
-        if self.row_group_size == 0:
-            self.row_group_size = self.chars_per_shard // 3_000
-
         if self.tokenizer_name == "":
             self.tokenizer_name = "./tokenizer.json"
         
