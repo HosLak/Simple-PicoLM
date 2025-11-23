@@ -71,9 +71,9 @@ class PicoAttn(nn.Module):
             Q, K, V, is_causal=True, dropout_p=self.dropout if self.training else 0.0
         )
         
-        gate_scores_raw = self.gate_linear(Q)
-        gate_scores = F.sigmoid(gate_scores_raw)
-        attn_output = attn_output * gate_scores
+        # gate_scores_raw = self.gate_linear(Q)
+        # gate_scores = F.sigmoid(gate_scores_raw)
+        # attn_output = attn_output * gate_scores
         
         attn_output = attn_output.transpose(1, 2).reshape(batch_size, seq_len, self.d_model)
         return self.w_o(attn_output)
