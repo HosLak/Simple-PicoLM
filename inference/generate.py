@@ -25,7 +25,7 @@ class TextGenerator:
         self.config.vocab_size = self.tokenizer.vocab_size
         
         # Load model
-        self.model = PicoLM(self.config).to(self.device)
+        self.model = PicoLM(self.config, self.device).to(self.device)
         self.model.load_state_dict(torch.load(model_path, map_location=self.device))
         self.model.eval()
         
@@ -107,7 +107,7 @@ class TextGenerator:
     
     def interactive_generate(self):
         """Interactive text generation in terminal"""
-        print("\n🤖 PicoLM Text Generator")
+        print("\nPicoLM Text Generator")
         print("Type 'quit' to exit\n")
         
         while True:

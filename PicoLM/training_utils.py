@@ -11,7 +11,7 @@ from .config import ModelConfig
 from .model import PicoLM, Muon
 from .data_utils import set_seed
 
-def evaluate_model(model: nn.Module, val_loader: DataLoader, config: ModelConfig):
+def evaluate_model(model: nn.Module, val_loader: DataLoader, config: ModelConfig, eval_iter=None):
     """Evaluate model performance"""
     model.eval()
     total_loss = 0
@@ -19,18 +19,19 @@ def evaluate_model(model: nn.Module, val_loader: DataLoader, config: ModelConfig
     total_correct = 0
 
     device = next(model.parameters()).device
-    valid_iter_loader = iter(val_loader)
+    
+    if eval_iter is None:
+        eval_iter = iter(val_loader)
 
     with torch.no_grad():
-        # for i, (x, y) in enumerate(val_loader):
-        step = 0
-        while step < config.eval_steps:
-            x, y, state = next(valid_iter_loader)
-            if step >= config.eval_steps:
-                break
+        for step in range(config.eval_steps):
+            try:
+                x, y, state = next(eval_iter)
+            except StopIteration:
+                eval_iter = iter(val_loader)
+                x, y, state = next(eval_iter)
 
             with autocast(enabled=config.use_amp):
-                # DataParallel
                 if hasattr(model, 'module'):
                     logits = model.module(x)
                 else:
@@ -42,7 +43,6 @@ def evaluate_model(model: nn.Module, val_loader: DataLoader, config: ModelConfig
 
             predictions = logits.argmax(dim=-1)
             total_correct += (predictions == y).sum().item()
-            step += 1
 
     avg_loss = total_loss / total_tokens
     accuracy = total_correct / total_tokens
@@ -87,14 +87,14 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
 
     # Initialize model
     set_seed(1337)
-    model = PicoLM(config)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = PicoLM(config, device)
     model = model.to(device)
 
     model_compiled  = torch.compile(
       model,
       dynamic=False,
-      # mode='reduce-overhead',
+    #   mode='default',
       # fullgraph=False,
       # disable=['conv_bn_fusion'],
       # disable=['triton_cudagraphs']
@@ -108,23 +108,27 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
 
     # Learning rate schedule
     schedulers = []
-    for optimizer in optimizers:
-        effective_max_steps = config.max_steps // config.gradient_accumulation_steps
-        warmup_steps = int(effective_max_steps * 0.06)
-        milestone1 = int(effective_max_steps * 0.8)
-        milestone2 = int(effective_max_steps * 0.9)
-        
+    warmup_steps = int(config.max_steps * 0.06)
+    m1 = int(config.max_steps * 0.8)
+    m2 = int(config.max_steps * 0.9)
+    
+    def make_lr_lambda(warmup, milestone1, milestone2):
         def lr_lambda(step):
-            if step < warmup_steps:
-                return float(step) / float(max(1, warmup_steps))
+            if step < warmup:
+                return float(step) / float(max(1, warmup))
             elif step < milestone1:
-                return 1
+                return 1.0
             elif step < milestone2:
                 return 0.316
             else:
                 return 0.1
-
-        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+        return lr_lambda
+    
+    for optimizer in optimizers:
+        scheduler = torch.optim.lr_scheduler.LambdaLR(
+            optimizer, 
+            make_lr_lambda(warmup_steps, m1, m2)
+        )
         schedulers.append(scheduler)
 
     scaler = GradScaler() if config.use_amp else None
@@ -149,6 +153,8 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
     # Training loop
     model_compiled.train()
     step = 0
+    total_tokens_seen = 0
+    micro_step = 0
     start_time = time.time()
     best_val_loss = float('inf')
 
@@ -161,8 +167,8 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
         except StopIteration:
             train_iter_loader = iter(train_loader)
             x, y, state = next(train_iter_loader)
-    
-        # x, y = x.to(device), y.to(device)
+        
+        total_tokens_seen += x.numel()
         
         # Forward pass with gradient accumulation
         if config.use_amp:
@@ -177,8 +183,10 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
             loss = loss / config.gradient_accumulation_steps
             loss.backward()
 
+        micro_step += 1  
+
         # Optimizer step after accumulation
-        if (step + 1) % config.gradient_accumulation_steps == 0:
+        if micro_step % config.gradient_accumulation_steps == 0:
             if config.use_amp:
                 for optimizer in optimizers:
                     scaler.unscale_(optimizer)
@@ -197,46 +205,49 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
                     optimizer.zero_grad(set_to_none=True)
                 for scheduler in schedulers:
                     scheduler.step()
+            
+            step += 1
 
-        # Logging
-        if step % 20 == 0:
-            with torch.no_grad():
-                predictions = logits.argmax(dim=-1)
-                accuracy = (predictions == y).float().mean().item()
-                current_loss = loss.item() * config.gradient_accumulation_steps
-                perplexity = math.exp(min(current_loss, 20))
+            if step % 20 == 0:
+                with torch.no_grad():
+                    predictions = logits.argmax(dim=-1)
+                    accuracy = (predictions == y).float().mean().item()
+                    current_loss = loss.item() * config.gradient_accumulation_steps
+                    perplexity = math.exp(min(current_loss, 20))
 
-            pbar.set_postfix({
-                'loss': f'{current_loss:.4f}',
-                'acc': f'{accuracy:.3f}',
-                'ppl': f'{perplexity:.1f}',
-                'muon_lr': f'{optimizers[0].param_groups[0]["lr"]:.2e}',
-                'adamw_lr': f'{optimizers[1].param_groups[0]["lr"]:.2e}'
-            })
-            pbar.update(20)
+                pbar.set_postfix({
+                    'loss': f'{current_loss:.4f}',
+                    'acc': f'{accuracy:.3f}',
+                    'ppl': f'{perplexity:.1f}',
+                    'tokens': f'{total_tokens_seen/1e6:.2f}M',
+                    'muon_lr': f'{optimizers[0].param_groups[0]["lr"]:.2e}',
+                    'adamw_lr': f'{optimizers[1].param_groups[0]["lr"]:.2e}'
+                })
+                pbar.update(20)
 
-        # Evaluation
-        if step % config.eval_every == 0 and step > 0:
-            model_compiled.eval()
-            eval_metrics = evaluate_model(model_compiled, val_loader, config)
-            val_losses.append(eval_metrics['val_loss'])
-            train_eval_metrics = evaluate_model(model_compiled, train_loader, config)
-            train_losses.append(train_eval_metrics['val_loss'])
-            print(f"\nStep {step}: Val Loss: {eval_metrics['val_loss']:.4f}, "
-                    f"Train Loss: {train_eval_metrics['val_loss']:.4f}, "
-                    f"Val Acc: {eval_metrics['val_accuracy']:.4f}, "
-                    f"Val PPL: {eval_metrics['val_perplexity']:.2f}")
-            model_compiled.train()
+            # Evaluation
+            if step % config.eval_every == 0 and step > 0:
+                model_compiled.eval()
+                eval_metrics = evaluate_model(model_compiled, val_loader, config)
+                val_losses.append(eval_metrics['val_loss'])
+                train_eval_metrics = evaluate_model(model_compiled, train_loader, config)
+                train_losses.append(train_eval_metrics['val_loss'])
+                print(f"\nStep {step} | Tokens: {total_tokens_seen:,} ({total_tokens_seen/1e6:.2f}M)")
+                print(f"\nStep {step}: Val Loss: {eval_metrics['val_loss']:.4f}, "
+                        f"Train Loss: {train_eval_metrics['val_loss']:.4f}, "
+                        f"Val Acc: {eval_metrics['val_accuracy']:.4f}, "
+                        f"Val PPL: {eval_metrics['val_perplexity']:.2f}")
+                model_compiled.train()
 
-            if eval_metrics['val_loss'] < best_val_loss:
-                best_val_loss = eval_metrics['val_loss']
-
-        step += 1
+                if eval_metrics['val_loss'] < best_val_loss:
+                    best_val_loss = eval_metrics['val_loss']
 
     pbar.close()
 
     training_time = time.time() - start_time
     print(f"   Training completed in {training_time:.1f} seconds")
+    print(f"   Total tokens seen: {total_tokens_seen:,} ({total_tokens_seen/1e6:.2f}M)")
+    print(f"   Expected tokens: {config.max_tokens:,} ({config.max_tokens/1e6:.2f}M)")
 
     # Final evaluation
     model_compiled.eval()

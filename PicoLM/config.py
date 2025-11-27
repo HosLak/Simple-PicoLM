@@ -12,8 +12,17 @@ class ModelConfig:
     d_ff: int = field(init=False)
     multiple_of: int = 128
     batch_size: int = 32
-    max_steps: int = 0 # max_tokens // (batch_size * gradient_accumulation_steps * max_seq_len) = 1 epoch
+    max_steps: int = 0 # set 0 for 1 epoch
     rope_theta: float = 100000.0
+    softcap: int = 15
+    
+    # Attentino HyperParameters
+    kv_lora_rank: int = None
+    q_lora_rank: int = None
+    qk_nope_head_dim: int = None
+    qk_rope_head_dim: int = None
+    v_head_dim: int = None
+    use_gating: bool = True
 
     # Training parameters
     gradient_accumulation_steps: int = 4
@@ -24,12 +33,12 @@ class ModelConfig:
     # Data parameters
     max_seq_len: int = 384
     stride: int = field(init=False) # not work!
-    max_tokens: int = 100_000_000
-    chars_per_shard: int = 10_000_000
-    row_group_size: int = 2048
+    max_tokens: int = 20_000_000
+    chars_per_shard: int = 5_000_000
+    row_group_size: int = 256
     dataset_name: str = "roneneldan/TinyStories" # HuggingFaceFW/fineweb
     dataset_cache_path: str = "PicoLM/dataset"
-    tokenizer_name: str = "roneneldan/TinyStories-1M" # HuggingFaceTB/SmolLM-135M
+    tokenizer_name: str = "HuggingFaceTB/SmolLM-135M" # HuggingFaceTB/SmolLM-135M
 
     # Evaluation
     eval_every: int = 150
@@ -42,17 +51,17 @@ class ModelConfig:
 
     # Technical
     use_amp: bool = True
-    vocab_size: Optional[int] = 50257 # 49152
+    vocab_size: Optional[int] = 49152 # 49152
 
     def __post_init__(self):
         assert self.d_model % self.n_heads == 0, "d_model must be divisible by n_heads"
         self.d_k = self.d_model // self.n_heads
         
-        # Set stride conditionally
-        if self.max_tokens > 10000000:
-            self.stride = self.max_seq_len // 2
-        else:
-            self.stride = self.max_seq_len
+        # # Set stride conditionally
+        # if self.max_tokens > 10000000:
+        #     self.stride = self.max_seq_len // 2
+        # else:
+        #     self.stride = self.max_seq_len
         
         # set maxstep conditionally
         if self.max_steps == 0:
@@ -63,6 +72,6 @@ class ModelConfig:
         
         # Set d_ff to 4 times d_model
         self.d_ff = int(self.multiple_of * int((((self.d_model * 4 * 2 / 3) * 1.3) + self.multiple_of + 1) // self.multiple_of))
-        
+
         assert self.n_heads % 4 == 0, "n_heads must be divisible by 4"
         self.n_kv_heads = self.n_heads // 4
