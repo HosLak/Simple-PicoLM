@@ -44,7 +44,7 @@ However, simple-PicoLM also performs well in general tasks like everyday chats o
 - **Muon Optimizer**: Orthogonalized momentum for efficient gradient updates.
 - **Automatic Mixed Precision (AMP)**: Reduces memory usage and speeds up training.
 - **Dataset**: Uses the [roneneldan/TinyStories](https://huggingface.co/datasets/roneneldan/TinyStories) for training.
-- **Tokenizer**: Employs a custom BPE tokenizer with a vocabulary size of 50,257 ([roneneldan/TinyStories-1M](https://huggingface.co/roneneldan/TinyStories-1M)).
+- **Tokenizer**: Employs a custom BPE tokenizer with a vocabulary size of 49,152 ([HuggingFaceTB/SmolLM-135M](https://huggingface.co/HuggingFaceTB/SmolLM-135M)).
 
 Training Results
 
@@ -75,7 +75,7 @@ The model is currently configured with the following hyperparameters for testing
 - hidden_dim: 384
 - n_heads: 4 (head_dim: 96)
 - n_kv_heads: 1
-- vocab_size: 50,257
+- vocab_size: 49,152
 - seq_len: 384
 
 **Note**: This is an experimental model designed to test and optimize the architecture's performance on a limited budget. For a deeper dive into the reasoning behind these hyperparameter choices and strategies for building efficient AI models, check out this article: [AI Unlocking Hyperparameter Secrets: Building Better AI Models on a Budget](https://medium.com/@hosseinlack123/aiunlocking-hyperparameter-secrets-building-better-ai-models-on-a-budget-60e25562b5e9)
@@ -86,7 +86,7 @@ Once the architecture is finalized, I plan to scale up to the following hyperpar
 - hidden_dim: 2048
 - n_heads: 16 (head_dim: 128)
 - n_kv_heads: 8
-- vocab_size: Approximately equivalent to GPT-2's vocabulary size
+- vocab_size: Approximately equivalent to SmolLM-135M vocabulary size
 - seq_len: Approximately 2048 (if increasing context length is feasible, otherwise likely to remain around 2048)
 
 # Future Roadmap
