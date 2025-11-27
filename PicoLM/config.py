@@ -38,7 +38,7 @@ class ModelConfig:
     row_group_size: int = 256
     dataset_name: str = "roneneldan/TinyStories" # HuggingFaceFW/fineweb
     dataset_cache_path: str = "PicoLM/dataset"
-    tokenizer_name: str = "HuggingFaceTB/SmolLM-135M" # HuggingFaceTB/SmolLM-135M
+    tokenizer_name: str = "HuggingFaceTB/SmolLM-135M"
 
     # Evaluation
     eval_every: int = 150
@@ -51,7 +51,7 @@ class ModelConfig:
 
     # Technical
     use_amp: bool = True
-    vocab_size: Optional[int] = 49152 # 49152
+    vocab_size: Optional[int] = 49152
 
     def __post_init__(self):
         assert self.d_model % self.n_heads == 0, "d_model must be divisible by n_heads"
