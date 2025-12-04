@@ -84,7 +84,7 @@ Once the architecture is finalized, I plan to scale up to the following hyperpar
 
 - n_layers: 32
 - hidden_dim: 1280
-- n_heads: 10 (head_dim: 128)
+- n_heads: 8 (head_dim: 160)
 - n_kv_heads: 5
 - vocab_size: 2^15 = 32,768
 - seq_len: Approximately 4096 (if increasing context length is feasible, otherwise likely to remain around 4096)
