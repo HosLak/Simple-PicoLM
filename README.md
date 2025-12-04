@@ -82,12 +82,12 @@ The model is currently configured with the following hyperparameters for testing
 
 Once the architecture is finalized, I plan to scale up to the following hyperparameters:
 
-- n_layers: 24
-- hidden_dim: 2048
-- n_heads: 16 (head_dim: 128)
-- n_kv_heads: 8
-- vocab_size: Approximately equivalent to SmolLM-135M vocabulary size
-- seq_len: Approximately 2048 (if increasing context length is feasible, otherwise likely to remain around 2048)
+- n_layers: 32
+- hidden_dim: 1280
+- n_heads: 8 (head_dim: 160)
+- n_kv_heads: 4
+- vocab_size: 2^15 = 32,768
+- seq_len: Approximately 4096 (if increasing context length is feasible, otherwise likely to remain around 4096)
 
 # Future Roadmap
 
